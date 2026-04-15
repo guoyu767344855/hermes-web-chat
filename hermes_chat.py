@@ -253,7 +253,6 @@ def get_html_content():
     <div class="sidebar">
         <div class="logo"><h1>Hermes Agent</h1><p>AI 智能助手</p></div>
         <div style="padding:10px;"><button class="new-session-btn" onclick="createNewSession()">+ 新会话</button></div>
-        <div id="sessionList" class="session-list"></div>
         <ul class="menu">
             <li class="menu-item active" data-page="chat">聊天对话</li>
             <li class="menu-item" data-page="memory">记忆管理</li>
@@ -268,6 +267,9 @@ def get_html_content():
     </div>
     <div class="main">
         <div id="page-chat" class="page active">
+            <div class="page-header" style="padding:15px 30px;border-bottom:1px solid #1f3a5f;">
+                <h2 id="currentSessionTitle" style="font-size:18px;color:#e8e8e8;">💬 当前会话</h2>
+            </div>
             <div class="chat-messages" id="chatMessages"></div>
             <div class="preview-container" id="previewContainer"><img class="preview-image" id="previewImage" src=""><button class="preview-remove" onclick="removeImage()">X</button></div>
             <div class="file-preview-container" id="filePreviewContainer"><div style="display:flex;align-items:center;gap:10px;"><span id="filePreviewIcon" style="font-size:24px;"></span><div><div id="filePreviewName" style="color:#e8e8e8;font-size:14px;"></div><div id="filePreviewSize" style="color:#666;font-size:12px;"></div></div><button class="file-preview-remove" onclick="removeFile()">X</button></div></div>
@@ -349,12 +351,12 @@ function createNewSession(){
     CURRENT_SESSION=sessionName;
     chatMessages.innerHTML='';
     addMessage('✨ 新会话已创建！有什么可以帮你的吗？',false,null,false);
-    loadSessionList();
+    updateSessionTitle();
 }
 function switchSession(sessionId){
     CURRENT_SESSION=sessionId;
     loadChatHistory();
-    loadSessionList();
+    updateSessionTitle();
     // 切换到聊天页面
     var allItems=document.querySelectorAll('.menu-item');
     for(var j=0;j<allItems.length;j++)allItems[j].classList.remove('active');
@@ -362,6 +364,11 @@ function switchSession(sessionId){
     var allPages=document.querySelectorAll('.page');
     for(var j=0;j<allPages.length;j++)allPages[j].classList.remove('active');
     document.getElementById('page-chat').classList.add('active');
+}
+
+function updateSessionTitle(){
+    var title=CURRENT_SESSION.replace(/_/g,' ').replace('session ','');
+    document.getElementById('currentSessionTitle').textContent='💬 '+title;
 }
 function setupInput(){
     messageInput.addEventListener('input',function(){this.style.height='auto';this.style.height=Math.min(this.scrollHeight,150)+'px';});
@@ -422,7 +429,8 @@ function saveChatHistory(){
         for(var i=0;i<divs.length;i++){
             var div=divs[i];
             var isUser=div.classList.contains('user');
-            var content=div.querySelector('.message-text').textContent;
+            var textDiv=div.querySelector('.message-text');
+            var content=textDiv?textDiv.textContent:'';
             var img=div.querySelector('.message-image');
             msgs.push({content:content,isUser:isUser,imageData:img?img.src:null});
         }
@@ -439,9 +447,31 @@ function addMessage(content,isUser,imageData,save){
     if(imageData)html+='<img class="message-image" src="'+imageData+'">';
     html+='</div>';
     div.innerHTML=html;
+    if(isUser){
+        div.style.cursor='pointer';
+        div.title='右键点击重新编辑';
+        div.oncontextmenu=function(e){
+            e.preventDefault();
+            editMessage(this);
+        };
+    }
     chatMessages.appendChild(div);
     chatMessages.scrollTop=chatMessages.scrollHeight;
     if(save)saveChatHistory();
+}
+
+function editMessage(msgDiv){
+    var textDiv=msgDiv.querySelector('.message-text');
+    var content=textDiv?textDiv.textContent:'';
+    var img=msgDiv.querySelector('.message-image');
+    if(confirm('确定要重新编辑这条消息吗？')){
+        messageInput.value=content;
+        messageInput.style.height='auto';
+        messageInput.style.height=Math.min(messageInput.scrollHeight,150)+'px';
+        messageInput.focus();
+        msgDiv.remove();
+        saveChatHistory();
+    }
 }
 
 function typeMessage(content){
