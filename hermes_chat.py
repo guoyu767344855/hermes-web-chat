@@ -301,6 +301,34 @@ async def api_skills():
 async def api_sessions():
     return JSONResponse(content=get_sessions_data())
 
+@app.put("/api/sessions/{session_id}")
+async def api_update_session(session_id: str, request: Request):
+    """更新会话标题"""
+    try:
+        body = await request.json()
+        new_title = body.get("title", "").strip()
+        
+        if not new_title:
+            return JSONResponse(status_code=400, content={"error": "标题不能为空"})
+        
+        sessions_dir = HERMES_HOME / "sessions"
+        session_file = sessions_dir / f"{session_id}.json"
+        
+        if not session_file.exists():
+            return JSONResponse(status_code=404, content={"error": "会话不存在"})
+        
+        with open(session_file, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        
+        data["title"] = new_title
+        
+        with open(session_file, 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        
+        return JSONResponse(content={"success": True, "title": new_title})
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
 @app.get("/api/cron")
 async def api_cron():
     return JSONResponse(content=get_cron_data())
@@ -538,6 +566,34 @@ def get_html_content():
             margin-bottom: 10px;
             border-left: 3px solid #00d9ff;
         }
+        .session-item {
+            position: relative;
+        }
+        .session-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        .session-title {
+            font-weight: bold;
+            color: #e8e8e8;
+            font-size: 15px;
+        }
+        .edit-btn {
+            background: linear-gradient(135deg, #00d9ff 0%, #0f3460 100%);
+            border: none;
+            border-radius: 6px;
+            padding: 4px 12px;
+            color: white;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        .edit-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(0, 217, 255, 0.4);
+        }
         .stats-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -602,6 +658,10 @@ def get_html_content():
         </div>
         <ul class="menu">
             <li class="menu-item active" data-page="chat"><span class="menu-icon">💬</span>聊天对话</li>
+        </ul>
+        <div style="padding:10px; border-top:1px solid #1f3a5f;">
+            <button onclick="clearChatHistory()" style="width:100%; padding:10px; background:#2a2a4e; color:#ff6b6b; border:none; border-radius:8px; cursor:pointer; font-size:14px;">🗑️ 清空对话</button>
+        </div>
             <li class="menu-item" data-page="memory"><span class="menu-icon">🧠</span>记忆管理</li>
             <li class="menu-item" data-page="skills"><span class="menu-icon">📚</span>技能列表</li>
             <li class="menu-item" data-page="sessions"><span class="menu-icon">📋</span>会话历史</li>
@@ -717,6 +777,45 @@ def get_html_content():
         var filePreviewContainer = document.getElementById('filePreviewContainer');
         var sendBtn = document.getElementById('sendBtn');
         
+        // 从 localStorage 加载聊天历史
+        var CHAT_STORAGE_KEY = 'hermes_chat_history';
+        function loadChatHistory() {
+            try {
+                var saved = localStorage.getItem(CHAT_STORAGE_KEY);
+                if (saved) {
+                    var history = JSON.parse(saved);
+                    history.forEach(function(msg) {
+                        addMessage(msg.content, msg.isUser, msg.imageData, false);
+                    });
+                    chatMessages.scrollTop = chatMessages.scrollHeight;
+                }
+            } catch (e) {
+                console.error('加载聊天历史失败:', e);
+            }
+        }
+        
+        // 保存聊天历史到 localStorage
+        function saveChatHistory() {
+            try {
+                var messages = [];
+                chatMessages.querySelectorAll('.message').forEach(function(div) {
+                    var isUser = div.classList.contains('user');
+                    var content = div.querySelector('.message-text').textContent;
+                    var img = div.querySelector('.message-image');
+                    var imageData = img ? img.src : null;
+                    messages.push({ content: content, isUser: isUser, imageData: imageData });
+                });
+                // 只保存最近 50 条
+                if (messages.length > 50) messages = messages.slice(-50);
+                localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(messages));
+            } catch (e) {
+                console.error('保存聊天历史失败:', e);
+            }
+        }
+        
+        // 页面加载时恢复聊天记录
+        loadChatHistory();
+        
         // 自动调整输入框高度
         messageInput.addEventListener('input', function() {
             this.style.height = 'auto';
@@ -809,7 +908,8 @@ def get_html_content():
         
         messageInput.addEventListener('keydown', handleKeyDown);
         
-        function addMessage(content, isUser, imageData) {
+        function addMessage(content, isUser, imageData, saveToStorage) {
+            if (saveToStorage === undefined) saveToStorage = true;
             var messageDiv = document.createElement('div');
             messageDiv.className = 'message ' + (isUser ? 'user' : 'assistant');
             var mediaHtml = '';
@@ -820,6 +920,7 @@ def get_html_content():
                 '<div class="message-content"><div class="message-text">' + content + '</div>' + mediaHtml + '</div>';
             chatMessages.appendChild(messageDiv);
             chatMessages.scrollTop = chatMessages.scrollHeight;
+            if (saveToStorage) saveChatHistory();
         }
         
         function showLoading() {
@@ -932,7 +1033,15 @@ def get_html_content():
                 if (data.sessions && data.sessions.length > 0) {
                     var html = '<div class="card"><div class="card-title">📋 最近会话 (' + data.count + ')</div><ul class="data-list">';
                     data.sessions.forEach(function(s) {
-                        html += '<li><strong>' + (s.title || '未命名') + '</strong><br><small>📅 ' + s.created + ' | 💬 ' + s.messages + ' 条</small><br><small style="color:#666;">' + s.preview + '</small></li>';
+                        var sessionId = s.id.replace('session_', '').split('_').slice(0, 3).join('_');
+                        html += '<li class="session-item">';
+                        html += '<div class="session-header">';
+                        html += '<span class="session-title" id="title-' + s.id + '">' + (s.title || '未命名') + '</span>';
+                        html += '<button class="edit-btn" onclick="editSessionTitle(\'' + s.id + '\', \'' + (s.title || '未命名').replace(/'/g, "\\'") + '\')">✏️ 编辑</button>';
+                        html += '</div>';
+                        html += '<small>📅 ' + s.created + ' | 💬 ' + s.messages + ' 条</small>';
+                        html += '<small style="color:#666;">' + s.preview + '</small>';
+                        html += '</li>';
                     });
                     html += '</ul></div>';
                     document.getElementById('sessions-content').innerHTML = html;
@@ -940,6 +1049,26 @@ def get_html_content():
                     document.getElementById('sessions-content').innerHTML = '<div class="empty-state">📋 暂无会话数据</div>';
                 }
             });
+        }
+        
+        function editSessionTitle(sessionId, currentTitle) {
+            var newTitle = prompt('请输入新的会话名称:', currentTitle);
+            if (newTitle && newTitle !== currentTitle) {
+                fetch('/api/sessions/' + sessionId, {
+                    method: 'PUT',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({title: newTitle})
+                }).then(function(r) { return r.json(); }).then(function(data) {
+                    if (data.success) {
+                        document.getElementById('title-' + sessionId).textContent = newTitle;
+                        alert('✅ 会话名称已更新！');
+                    } else {
+                        alert('❌ 更新失败：' + (data.error || '未知错误'));
+                    }
+                }).catch(function(e) {
+                    alert('❌ 更新失败：' + e.message);
+                });
+            }
         }
         
         function loadCron() {
@@ -981,6 +1110,14 @@ def get_html_content():
                 var html = '<div class="stats-grid"><div class="stat-card"><div class="stat-value">' + (data.peak_hour || 'N/A') + ':00</div><div class="stat-label">高峰时段</div></div></div>';
                 document.getElementById('patterns-content').innerHTML = html;
             });
+        }
+        
+        // 清空对话历史
+        function clearChatHistory() {
+            if (confirm('确定要清空所有聊天记录吗？')) {
+                localStorage.removeItem(CHAT_STORAGE_KEY);
+                chatMessages.innerHTML = '<div class="message assistant"><div class="message-avatar">🤖</div><div class="message-content"><div class="message-text">👋 对话已清空，有什么可以帮你的吗？</div></div></div>';
+            }
         }
     </script>
 </body>
