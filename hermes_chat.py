@@ -880,6 +880,33 @@ def get_html_content() -> str:
             });
         });
         
+        // 页面切换
+        document.querySelectorAll('.menu-item').forEach(item => {
+            item.addEventListener('click', function() {
+                const page = this.dataset.page;
+                
+                // 更新菜单状态
+                document.querySelectorAll('.menu-item').forEach(i => i.classList.remove('active'));
+                this.classList.add('active');
+                
+                // 切换页面
+                document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+                const targetPage = document.getElementById('page-' + page);
+                if (targetPage) {
+                    targetPage.classList.add('active');
+                }
+                
+                // 加载页面数据
+                if (page === 'memory') loadMemory();
+                else if (page === 'skills') loadSkills();
+                else if (page === 'sessions') loadSessions();
+                else if (page === 'cron') loadCron();
+                else if (page === 'projects') loadProjects();
+                else if (page === 'costs') loadCosts();
+                else if (page === 'patterns') loadPatterns();
+            });
+        });
+        
         // 聊天功能
         let currentImage = null;
         let currentFile = null;
