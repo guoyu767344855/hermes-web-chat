@@ -356,12 +356,23 @@ def get_html_content() -> str:
             align-items: center;
             gap: 10px;
         }
-        /* 聊天页面样式 */
+        /* 聊天页面布局 */
+        #page-chat {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+        }
+        #page-chat.page.active {
+            display: flex;
+        }
         .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 30px;
             display: flex;
             flex-direction: column;
             gap: 20px;
-            padding-bottom: 100px;
         }
         .message {
             display: flex;
@@ -403,11 +414,45 @@ def get_html_content() -> str:
             white-space: pre-wrap;
             word-wrap: break-word;
         }
-        .message-image { max-width: 300px; border-radius: 10px; margin-top: 10px; border: 2px solid #2a2a4e; }
+        .message-image, .message-file {
+            max-width: 300px;
+            border-radius: 10px;
+            margin-top: 10px;
+            border: 2px solid #2a2a4e;
+        }
+        .message-file {
+            padding: 15px;
+            background: #0f0f1a;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .file-icon {
+            font-size: 32px;
+        }
+        .file-info {
+            flex: 1;
+            overflow: hidden;
+        }
+        .file-name {
+            color: #00d9ff;
+            font-size: 14px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .file-size {
+            color: #666;
+            font-size: 12px;
+        }
         .input-container {
             padding: 20px 30px;
             background: rgba(15, 15, 26, 0.95);
             border-top: 1px solid #1f3a5f;
+            position: sticky;
+            bottom: 0;
+            z-index: 100;
+            backdrop-filter: blur(10px);
         }
         .input-wrapper {
             display: flex;
@@ -436,7 +481,12 @@ def get_html_content() -> str:
             font-family: inherit;
         }
         #messageInput::placeholder { color: #666; }
-        .input-actions { display: flex; gap: 8px; padding-right: 8px; }
+        .input-actions {
+            display: flex;
+            gap: 8px;
+            padding-right: 8px;
+            align-items: center;
+        }
         .action-btn {
             width: 44px;
             height: 44px;
@@ -462,6 +512,9 @@ def get_html_content() -> str:
             padding: 10px 30px;
             background: rgba(15, 15, 26, 0.95);
             border-top: 1px solid #1f3a5f;
+            position: sticky;
+            bottom: 85px;
+            z-index: 99;
         }
         .preview-container.show { display: block; }
         .preview-wrapper { display: inline-block; position: relative; }
@@ -482,6 +535,49 @@ def get_html_content() -> str:
             align-items: center;
             justify-content: center;
         }
+        .file-preview-container {
+            display: none;
+            padding: 10px 30px;
+            background: rgba(15, 15, 26, 0.95);
+            border-top: 1px solid #1f3a5f;
+        }
+        .file-preview-container.show { display: block; }
+        .file-preview-item {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            background: #1a1a2e;
+            padding: 12px 20px;
+            border-radius: 10px;
+            border: 1px solid #2a2a4e;
+        }
+        .file-preview-icon {
+            font-size: 32px;
+        }
+        .file-preview-info {
+            flex: 1;
+        }
+        .file-preview-name {
+            color: #e8e8e8;
+            font-size: 14px;
+        }
+        .file-preview-size {
+            color: #666;
+            font-size: 12px;
+        }
+        .file-preview-remove {
+            background: #ff4757;
+            color: white;
+            border: none;
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
         .typing-indicator { display: flex; gap: 5px; padding: 15px 20px; }
         .typing-dot {
             width: 8px;
@@ -496,7 +592,7 @@ def get_html_content() -> str:
             0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
             30% { transform: translateY(-10px); opacity: 1; }
         }
-        #fileInput { display: none; }
+        #fileInput, #imageInput { display: none; }
         ::-webkit-scrollbar { width: 8px; }
         ::-webkit-scrollbar-track { background: #1a1a2e; }
         ::-webkit-scrollbar-thumb { background: #2a2a4e; border-radius: 4px; }
@@ -655,18 +751,33 @@ def get_html_content() -> str:
                     </div>
                 </div>
             </div>
+            <!-- 图片预览 -->
             <div class="preview-container" id="previewContainer">
                 <div class="preview-wrapper">
                     <img class="preview-image" id="previewImage" src="" alt="预览">
                     <button class="preview-remove" onclick="removeImage()">✕</button>
                 </div>
             </div>
+            <!-- 文件预览 -->
+            <div class="file-preview-container" id="filePreviewContainer">
+                <div class="file-preview-item">
+                    <div class="file-preview-icon" id="filePreviewIcon">📄</div>
+                    <div class="file-preview-info">
+                        <div class="file-preview-name" id="filePreviewName">filename.pdf</div>
+                        <div class="file-preview-size" id="filePreviewSize">1.2 MB</div>
+                    </div>
+                    <button class="file-preview-remove" onclick="removeFile()">✕</button>
+                </div>
+            </div>
+            <!-- 输入区域 -->
             <div class="input-container">
                 <div class="input-wrapper">
-                    <textarea id="messageInput" placeholder="输入消息... (支持直接粘贴图片 Ctrl+V/Cmd+V)" rows="1" onkeydown="handleKeyDown(event)"></textarea>
-                    <input type="file" id="fileInput" accept="image/*" onchange="handleFileSelect(event)">
+                    <textarea id="messageInput" placeholder="输入消息... (支持粘贴图片 Ctrl+V/Cmd+V)" rows="1" onkeydown="handleKeyDown(event)"></textarea>
+                    <input type="file" id="imageInput" accept="image/*" onchange="handleImageSelect(event)">
+                    <input type="file" id="fileInput" onchange="handleFileSelect(event)">
                     <div class="input-actions">
-                        <button class="action-btn upload-btn" onclick="document.getElementById('fileInput').click()" title="上传图片">📎</button>
+                        <button class="action-btn upload-btn" onclick="document.getElementById('imageInput').click()" title="上传图片">🖼️</button>
+                        <button class="action-btn upload-btn" onclick="document.getElementById('fileInput').click()" title="上传文件">📎</button>
                         <button class="action-btn send-btn" id="sendBtn" onclick="sendMessage()" title="发送">📤</button>
                     </div>
                 </div>
@@ -771,10 +882,15 @@ def get_html_content() -> str:
         
         // 聊天功能
         let currentImage = null;
+        let currentFile = null;
         const chatMessages = document.getElementById('chatMessages');
         const messageInput = document.getElementById('messageInput');
         const previewContainer = document.getElementById('previewContainer');
         const previewImage = document.getElementById('previewImage');
+        const filePreviewContainer = document.getElementById('filePreviewContainer');
+        const filePreviewIcon = document.getElementById('filePreviewIcon');
+        const filePreviewName = document.getElementById('filePreviewName');
+        const filePreviewSize = document.getElementById('filePreviewSize');
         const sendBtn = document.getElementById('sendBtn');
         
         messageInput.addEventListener('input', function() {
@@ -807,10 +923,47 @@ def get_html_content() -> str:
         function removeImage() {
             currentImage = null;
             previewContainer.classList.remove('show');
+            document.getElementById('imageInput').value = '';
+        }
+        
+        function removeFile() {
+            currentFile = null;
+            filePreviewContainer.classList.remove('show');
             document.getElementById('fileInput').value = '';
         }
         
+        function getFileIcon(filename) {
+            const ext = filename.split('.').pop().toLowerCase();
+            const icons = {
+                'pdf': '📕', 'doc': '📘', 'docx': '📘', 'txt': '📄',
+                'xls': '📗', 'xlsx': '📗', 'csv': '📗',
+                'ppt': '📙', 'pptx': '📙',
+                'zip': '📦', 'rar': '📦', '7z': '📦',
+                'jpg': '🖼️', 'jpeg': '🖼️', 'png': '🖼️', 'gif': '🖼️', 'webp': '🖼️',
+                'mp3': '🎵', 'wav': '🎵', 'mp4': '🎬', 'mov': '🎬', 'avi': '🎬',
+                'py': '🐍', 'js': '📜', 'html': '🌐', 'css': '🎨', 'json': '📋'
+            };
+            return icons[ext] || '📄';
+        }
+        
+        function formatFileSize(bytes) {
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+            return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+        }
+        
         function handleFileSelect(e) {
+            const file = e.target.files[0];
+            if (file) {
+                currentFile = file;
+                filePreviewIcon.textContent = getFileIcon(file.name);
+                filePreviewName.textContent = file.name;
+                filePreviewSize.textContent = formatFileSize(file.size);
+                filePreviewContainer.classList.add('show');
+            }
+        }
+        
+        function handleImageSelect(e) {
             const file = e.target.files[0];
             if (file) {
                 const reader = new FileReader();
@@ -829,18 +982,29 @@ def get_html_content() -> str:
             }
         }
         
-        function addMessage(content, isUser, imageData = null) {
+        function addMessage(content, isUser, imageData = null, fileData = null) {
             const messageDiv = document.createElement('div');
             messageDiv.className = `message ${isUser ? 'user' : 'assistant'}`;
-            let imageHtml = '';
+            let mediaHtml = '';
             if (imageData) {
-                imageHtml = `<img class="message-image" src="${imageData}" alt="图片">`;
+                mediaHtml = `<img class="message-image" src="${imageData}" alt="图片">`;
+            }
+            if (fileData) {
+                mediaHtml += `
+                    <div class="message-file">
+                        <div class="file-icon">${getFileIcon(fileData.name)}</div>
+                        <div class="file-info">
+                            <div class="file-name">${fileData.name}</div>
+                            <div class="file-size">${formatFileSize(fileData.size)}</div>
+                        </div>
+                    </div>
+                `;
             }
             messageDiv.innerHTML = `
                 <div class="message-avatar">${isUser ? '👤' : '🤖'}</div>
                 <div class="message-content">
                     <div class="message-text">${content}</div>
-                    ${imageHtml}
+                    ${mediaHtml}
                 </div>
             `;
             chatMessages.appendChild(messageDiv);
@@ -872,23 +1036,41 @@ def get_html_content() -> str:
         
         async function sendMessage() {
             const message = messageInput.value.trim();
-            if (!message && !currentImage) return;
+            if (!message && !currentImage && !currentFile) return;
             
             sendBtn.disabled = true;
-            addMessage(message || '[图片]', true, currentImage);
+            
+            // 构建用户消息显示
+            let userMsg = message;
+            let imageData = null;
+            let fileData = null;
+            
+            if (currentImage) {
+                userMsg = userMsg ? userMsg + '\n[图片]' : '[图片]';
+                imageData = currentImage;
+            }
+            if (currentFile) {
+                userMsg = userMsg ? userMsg + '\n[文件：' + currentFile.name + ']' : '[文件：' + currentFile.name + ']';
+                fileData = currentFile;
+            }
+            
+            addMessage(userMsg, true, imageData);
             messageInput.value = '';
             messageInput.style.height = 'auto';
-            const imageData = currentImage;
             removeImage();
+            removeFile();
             showLoading();
             
             try {
                 const formData = new FormData();
-                formData.append('message', message || '请分析这张图片');
+                formData.append('message', message || (imageData ? '请分析这张图片' : '请处理这个文件'));
                 if (imageData) {
                     const response = await fetch(imageData);
                     const blob = await response.blob();
                     formData.append('image', blob, 'image.png');
+                }
+                if (fileData) {
+                    formData.append('file', fileData);
                 }
                 const res = await fetch('/api/chat', { method: 'POST', body: formData });
                 const data = await res.json();
@@ -1112,18 +1294,40 @@ async def get_chat_page():
     return HTMLResponse(content=get_html_content())
 
 @app.post("/api/chat")
-async def chat(message: str = Form(...), image: UploadFile = File(None)):
+async def chat(message: str = Form(...), image: UploadFile = File(None), file: UploadFile = File(None)):
     """处理聊天请求"""
     image_path = None
+    file_path = None
+    
+    # 处理图片
     if image:
         temp_path = tempfile.mktemp(suffix=".png", dir=str(UPLOAD_DIR))
         with open(temp_path, "wb") as f:
             content = await image.read()
             f.write(content)
         image_path = temp_path
-    response = call_hermes(message, image_path)
+    
+    # 处理文件
+    if file:
+        temp_path = tempfile.mktemp(suffix=f"_{file.filename}", dir=str(UPLOAD_DIR))
+        with open(temp_path, "wb") as f:
+            content = await file.read()
+            f.write(content)
+        file_path = temp_path
+    
+    # 构建消息
+    full_message = message
+    if file and file.filename:
+        full_message = f"{message}\n\n[文件：{file.filename}]\n文件已上传，请分析或处理。"
+    
+    response = call_hermes(full_message, image_path)
+    
+    # 清理临时文件
     if image_path and os.path.exists(image_path):
         os.remove(image_path)
+    if file_path and os.path.exists(file_path):
+        os.remove(file_path)
+    
     return JSONResponse(content={"response": response})
 
 @app.get("/api/memory")
