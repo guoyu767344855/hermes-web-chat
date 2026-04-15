@@ -70,8 +70,31 @@ def get_sessions_data():
     for fp in sorted(glob.glob(str(sessions_dir / "*.json")), reverse=True)[:50]:
         try:
             with open(fp, 'r', encoding='utf-8') as f: data = json.load(f)
-            preview = next((m.get("content","")[:100] for m in data.get("messages",[])[:3] if m.get("role")=="user"), "")
-            sessions.append({"id": Path(fp).stem, "title": data.get("title",""), "created": data.get("created_at",""), "messages": len(data.get("messages",[])), "preview": preview})
+            # 从文件名提取时间：session_20260415_165704_xxx.json
+            filename = Path(fp).stem
+            parts = filename.split('_')
+            time_str = ""
+            if len(parts) >= 3:
+                date = parts[1]  # 20260415
+                time = parts[2]  # 165704
+                time_str = f"{date[:4]}-{date[4:6]}-{date[6:8]} {time[:2]}:{time[2:4]}"
+            # 获取标题或从第一条消息生成
+            title = data.get("title", "")
+            if not title:
+                msgs = data.get("messages", [])
+                for m in msgs:
+                    if m.get("role") == "user":
+                        title = m.get("content", "未命名会话")[:30]
+                        break
+                if not title: title = "未命名会话"
+            preview = next((m.get("content","")[:100] for m in msgs[:3] if m.get("role")=="user"), "")
+            sessions.append({
+                "id": filename,
+                "title": title,
+                "created": data.get("created_at", time_str),
+                "messages": len(msgs),
+                "preview": preview
+            })
         except: continue
     return {"sessions": sessions, "count": len(sessions)}
 
@@ -255,6 +278,10 @@ def get_html_content():
 <body>
     <div class="sidebar">
         <div class="logo"><h1>Hermes Agent</h1><p>AI 智能助手</p></div>
+        <div style="padding:10px; border-bottom:1px solid #1f3a5f; margin-bottom:10px;">
+            <button class="clear-btn" onclick="createNewSession()" style="margin:0; background:linear-gradient(135deg, #00d9ff, #0099ff); color:white;">+ 新会话</button>
+        </div>
+        <div id="sessionList" style="padding:0 10px; max-height:200px; overflow-y:auto; margin-bottom:10px;"></div>
         <ul class="menu">
             <li class="menu-item active" data-page="chat">聊天对话</li>
             <li class="menu-item" data-page="memory">记忆管理</li>
@@ -265,7 +292,7 @@ def get_html_content():
             <li class="menu-item" data-page="costs">费用统计</li>
             <li class="menu-item" data-page="patterns">使用模式</li>
         </ul>
-        <div style="padding:10px; border-top:1px solid #1f3a5f;"><button class="clear-btn" onclick="clearChatHistory()">清空对话</button></div>
+        <div style="padding:10px; border-top:1px solid #1f3a5f;"><button class="clear-btn" onclick="clearChatHistory()">清空当前对话</button></div>
     </div>
     <div class="main">
         <div id="page-chat" class="page active">
@@ -294,7 +321,7 @@ def get_html_content():
         <div id="page-patterns" class="page"><div class="page-header"><h2>使用模式 <button class="refresh-btn" onclick="loadPatterns()">刷新</button></h2></div><div class="chat-messages" id="patterns-content"><div class="loading"><div class="loading-spinner"></div>加载中...</div></div></div>
     </div>
     <script>
-var CHAT_KEY='hermes_chat_v1';
+var CURRENT_SESSION='session_current';
 var currentImage=null,currentFile=null,chatMessages,messageInput,previewContainer,previewImage,filePreviewContainer,sendBtn;
 window.onload=function(){
     chatMessages=document.getElementById('chatMessages');
@@ -304,6 +331,7 @@ window.onload=function(){
     filePreviewContainer=document.getElementById('filePreviewContainer');
     sendBtn=document.getElementById('sendBtn');
     initMenu();
+    loadSessionList();
     loadChatHistory();
     setupInput();
 };
@@ -327,6 +355,34 @@ function initMenu(){
             else if(page==='patterns')loadPatterns();
         };
     }
+}
+
+function loadSessionList(){
+    fetch('/api/sessions').then(function(r){return r.json();}).then(function(data){
+        var html='';
+        var sessions=data.sessions||[];
+        for(var i=0;i<Math.min(sessions.length,10);i++){
+            var s=sessions[i];
+            var isActive=s.id===CURRENT_SESSION?'style="background:rgba(0,217,255,0.2);border-left:3px solid #00d9ff;"':'';
+            html+='<div onclick="switchSession(\''+s.id+'\')" style="padding:10px;margin:4px 0;border-radius:8px;cursor:pointer;color:#888;'+isActive+'"><div style="font-size:13px;color:#e8e8e8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+(s.title||'未命名')+'</div><div style="font-size:11px;color:#666;">'+(s.created||'')+' · '+s.messages+'条</div></div>';
+        }
+        document.getElementById('sessionList').innerHTML=html;
+    });
+}
+
+function createNewSession(){
+    var now=new Date();
+    var sessionName='session_'+now.toISOString().replace(/[:-]/g,'').split('.')[0].replace('T','_');
+    CURRENT_SESSION=sessionName;
+    chatMessages.innerHTML='';
+    addMessage('👋 新会话已创建，有什么可以帮你的吗？',false,null,false);
+    loadSessionList();
+}
+
+function switchSession(sessionId){
+    CURRENT_SESSION=sessionId;
+    loadChatHistory();
+    loadSessionList();
 }
 function setupInput(){
     messageInput.addEventListener('input',function(){this.style.height='auto';this.style.height=Math.min(this.scrollHeight,150)+'px';});
@@ -355,10 +411,12 @@ function formatFileSize(bytes){if(bytes<1024)return bytes+' B';if(bytes<1048576)
 function handleImageSelect(e){var file=e.target.files[0];if(file){var reader=new FileReader();reader.onload=function(evt){currentImage=evt.target.result;showPreview(currentImage);};reader.readAsDataURL(file);}}
 function handleFileSelect(e){var file=e.target.files[0];if(file){currentFile=file;document.getElementById('filePreviewIcon').innerHTML=getFileIcon(file.name);document.getElementById('filePreviewName').textContent=file.name;document.getElementById('filePreviewSize').textContent=formatFileSize(file.size);filePreviewContainer.classList.add('show');}}
 function loadChatHistory(){
+    var sessionKey='hermes_chat_'+CURRENT_SESSION;
     try{
-        var saved=localStorage.getItem(CHAT_KEY);
+        var saved=localStorage.getItem(sessionKey);
         if(saved){
             var history=JSON.parse(saved);
+            chatMessages.innerHTML='';
             for(var i=0;i<history.length;i++){
                 var msg=history[i];
                 var div=document.createElement('div');
@@ -370,10 +428,14 @@ function loadChatHistory(){
                 chatMessages.appendChild(div);
             }
             chatMessages.scrollTop=chatMessages.scrollHeight;
-        }else{addMessage('你好！我是 Hermes Agent，有什么可以帮你的吗？',false,null,false);}
+        }else{
+            chatMessages.innerHTML='';
+            addMessage('👋 你好！我是 Hermes Agent，有什么可以帮你的吗？',false,null,false);
+        }
     }catch(e){console.error('Load error:',e);}
 }
 function saveChatHistory(){
+    var sessionKey='hermes_chat_'+CURRENT_SESSION;
     try{
         var msgs=[];
         var divs=chatMessages.querySelectorAll('.message');
@@ -384,8 +446,8 @@ function saveChatHistory(){
             var img=div.querySelector('.message-image');
             msgs.push({content:content,isUser:isUser,imageData:img?img.src:null});
         }
-        if(msgs.length>50)msgs=msgs.slice(-50);
-        localStorage.setItem(CHAT_KEY,JSON.stringify(msgs));
+        if(msgs.length>100)msgs=msgs.slice(-100);
+        localStorage.setItem(sessionKey,JSON.stringify(msgs));
     }catch(e){console.error('Save error:',e);}
 }
 function addMessage(content,isUser,imageData,save){
