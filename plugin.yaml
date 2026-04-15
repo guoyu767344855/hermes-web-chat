@@ -1,0 +1,33 @@
+name: hermes-web-chat
+version: 1.0.0
+description: Hermes Agent Web Chat - 支持图片粘贴的现代化聊天界面
+author: 郭昱 <guoyu@qtshe.com>
+homepage: https://github.com/guoyu/hermes-web-chat
+
+# 插件类型
+type: web-app
+
+# 启动命令
+command: python3 {plugin_dir}/hermes_chat.py
+
+# 依赖
+dependencies:
+  - fastapi
+  - uvicorn
+  - python-multipart
+
+# 端口配置
+port: 8888
+
+# 环境变量
+env:
+  HERMES_HOME: ~/.Hermes
+
+# 图标
+icon: 💬
+
+# 标签
+tags:
+  - chat
+  - web-ui
+  - image-upload
