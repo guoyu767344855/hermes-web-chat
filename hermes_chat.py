@@ -1,5 +1,5 @@
 """
-Hermes Agent Web Chat - Fixed Version
+Hermes Agent Web Chat - 多会话版本
 """
 from fastapi import FastAPI, Form, UploadFile, File
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -15,36 +15,21 @@ UPLOAD_DIR = HERMES_HOME / "web-chat" / "uploads"
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 def get_memory_data():
-    # 尝试多个可能的 MEMORY.md 路径
-    possible_paths = [
-        HERMES_HOME / "memories" / "MEMORY.md",
-        HERMES_HOME / "MEMORY.md",
-        Path.home() / ".hermes" / "memories" / "MEMORY.md",
-        Path.home() / ".Hermes" / "memories" / "MEMORY.md",
-    ]
+    possible_paths = [HERMES_HOME / "memories" / "MEMORY.md", HERMES_HOME / "MEMORY.md", Path.home() / ".hermes" / "memories" / "MEMORY.md"]
     memory_file = None
     for p in possible_paths:
-        if p.exists():
-            memory_file = p
-            break
-    if not memory_file:
-        return {"daily": [], "long_term": [], "file_path": None}
-    
+        if p.exists(): memory_file = p; break
+    if not memory_file: return {"daily": [], "long_term": [], "file_path": None}
     content = memory_file.read_text()
     daily, current = [], []
     for line in content.split('\n'):
-        # 匹配日期格式：> 2026- 或 2026-03-16 记忆记录
         if line.startswith('> 2026-') or line.startswith('> 2025-') or (len(line) > 10 and line[0:4].isdigit() and line[4:5] == '-'):
             if current: daily.append('\n'.join(current))
             current = [line]
-        elif line.strip() and current:
-            current.append(line)
+        elif line.strip() and current: current.append(line)
         elif line.startswith('§') or line.strip() == '---':
-            if current:
-                daily.append('\n'.join(current))
-                current = []
+            if current: daily.append('\n'.join(current)); current = []
     if current: daily.append('\n'.join(current))
-    # 过滤掉空项目和标题行
     daily = [d for d in daily if d.strip() and not d.startswith('> 这里保存')]
     return {"daily": daily[-20:], "long_term": [], "file_path": str(memory_file)}
 
@@ -53,13 +38,12 @@ def get_skills_data():
         result = subprocess.run(["hermes", "skills", "list"], capture_output=True, text=True, timeout=30, env={**os.environ, "HERMES_HOME": str(HERMES_HOME)})
         skills = []
         for line in result.stdout.strip().split('\n'):
-            # 使用正确的表格分隔符 │ (U+2502)
             if line.strip() and '│' in line and 'Name' not in line and '━━' not in line:
                 parts = [p.strip() for p in line.split('│') if p.strip()]
                 if len(parts) >= 2 and parts[0].strip() and not parts[0].startswith('┡'):
                     skills.append({"name": parts[0], "category": parts[1] if len(parts) > 1 else "", "description": ""})
         return {"skills": skills, "count": len(skills)}
-    except Exception as e: 
+    except Exception as e:
         print(f"Skills error: {e}")
         return {"skills": [], "count": 0}
 
@@ -70,31 +54,23 @@ def get_sessions_data():
     for fp in sorted(glob.glob(str(sessions_dir / "*.json")), reverse=True)[:50]:
         try:
             with open(fp, 'r', encoding='utf-8') as f: data = json.load(f)
-            # 从文件名提取时间：session_20260415_165704_xxx.json
             filename = Path(fp).stem
             parts = filename.split('_')
             time_str = ""
             if len(parts) >= 3:
-                date = parts[1]  # 20260415
-                time = parts[2]  # 165704
+                date = parts[1]
+                time = parts[2]
                 time_str = f"{date[:4]}-{date[4:6]}-{date[6:8]} {time[:2]}:{time[2:4]}"
-            # 获取标题或从第一条消息生成
             title = data.get("title", "")
+            msgs = data.get("messages", [])
             if not title:
-                msgs = data.get("messages", [])
                 for m in msgs:
                     if m.get("role") == "user":
                         title = m.get("content", "未命名会话")[:30]
                         break
                 if not title: title = "未命名会话"
             preview = next((m.get("content","")[:100] for m in msgs[:3] if m.get("role")=="user"), "")
-            sessions.append({
-                "id": filename,
-                "title": title,
-                "created": data.get("created_at", time_str),
-                "messages": len(msgs),
-                "preview": preview
-            })
+            sessions.append({"id": filename, "title": title, "created": data.get("created_at", time_str), "messages": len(msgs), "preview": preview})
         except: continue
     return {"sessions": sessions, "count": len(sessions)}
 
@@ -105,31 +81,21 @@ def get_cron_data():
     except: return {"raw": ""}
 
 def get_projects_data():
-    # 尝试多个可能的 MEMORY.md 路径
-    possible_paths = [
-        HERMES_HOME / "memories" / "MEMORY.md",
-        HERMES_HOME / "MEMORY.md",
-        Path.home() / ".hermes" / "memories" / "MEMORY.md",
-        Path.home() / ".Hermes" / "memories" / "MEMORY.md",
-    ]
+    possible_paths = [HERMES_HOME / "memories" / "MEMORY.md", HERMES_HOME / "MEMORY.md", Path.home() / ".hermes" / "memories" / "MEMORY.md"]
     projects = []
     for p in possible_paths:
         if p.exists():
             content = p.read_text()
-            # 提取项目信息
             current_project = []
             for line in content.split('\n'):
                 if '🎯 重要项目' in line:
-                    if current_project:
-                        projects.append(' '.join(current_project))
+                    if current_project: projects.append(' '.join(current_project))
                     current_project = [line.strip()]
                 elif current_project and ('**' in line or line.strip().startswith('-')):
                     current_project.append(line.strip())
                 elif current_project and line.strip() == '---':
-                    projects.append(' '.join(current_project))
-                    current_project = []
-            if current_project:
-                projects.append(' '.join(current_project))
+                    projects.append(' '.join(current_project)); current_project = []
+            if current_project: projects.append(' '.join(current_project))
             break
     return {"projects": projects or ["暂无项目数据"], "count": len(projects)}
 
@@ -221,11 +187,17 @@ def get_html_content():
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: linear-gradient(135deg, #0f0f1a 0%, #1a1a2e 50%, #16213e 100%); min-height: 100vh; display: flex; color: #e8e8e8; }
-        .sidebar { width: 260px; background: linear-gradient(180deg, #0a0a1a 0%, #1a1a2e 100%); border-right: 1px solid #1f3a5f; padding: 20px 0; flex-shrink: 0; display: flex; flex-direction: column; }
-        .logo { text-align: center; padding: 20px; border-bottom: 1px solid #1f3a5f; margin-bottom: 20px; }
+        .sidebar { width: 260px; background: linear-gradient(180deg, #0a0a1a 0%, #1a1a2e 100%); border-right: 1px solid #1f3a5f; flex-shrink: 0; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+        .logo { text-align: center; padding: 20px; border-bottom: 1px solid #1f3a5f; margin-bottom: 10px; }
         .logo h1 { font-size: 24px; background: linear-gradient(135deg, #00d9ff 0%, #00ff88 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
         .logo p { color: #666; font-size: 12px; margin-top: 5px; }
-        .menu { list-style: none; padding: 0 10px; flex: 1; }
+        .session-list { padding: 0 10px; flex: 0 0 auto; max-height: 25vh; overflow-y: auto; margin-bottom: 10px; border-bottom: 1px solid #1f3a5f; padding-bottom: 10px; }
+        .session-item { padding: 10px; margin: 4px 0; border-radius: 8px; cursor: pointer; color: #888; transition: all 0.2s; }
+        .session-item:hover { background: rgba(0, 217, 255, 0.1); }
+        .session-item.active { background: rgba(0, 217, 255, 0.2); border-left: 3px solid #00d9ff; }
+        .session-title { font-size: 13px; color: #e8e8e8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .session-meta { font-size: 11px; color: #666; margin-top: 4px; }
+        .menu { list-style: none; padding: 0 10px; flex: 1; overflow-y: auto; }
         .menu-item { padding: 12px 16px; margin: 4px 0; border-radius: 8px; cursor: pointer; transition: all 0.2s ease; color: #888; display: flex; align-items: center; gap: 12px; font-size: 14px; }
         .menu-item:hover { background: rgba(0, 217, 255, 0.1); color: #00d9ff; }
         .menu-item.active { background: linear-gradient(135deg, #00d9ff 0%, #0099ff 100%); color: white; box-shadow: 0 4px 15px rgba(0, 217, 255, 0.3); }
@@ -269,6 +241,8 @@ def get_html_content():
         .loading-spinner { width: 40px; height: 40px; border: 3px solid #2a2a4e; border-top-color: #00d9ff; border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 20px; }
         @keyframes spin { to { transform: rotate(360deg); } }
         .refresh-btn { background: #2a2a4e; color: #00d9ff; border: none; padding: 8px 16px; border-radius: 8px; cursor: pointer; }
+        .new-session-btn { width: 100%; padding: 10px; background: linear-gradient(135deg, #00d9ff, #0099ff); color: white; border: none; border-radius: 8px; cursor: pointer; margin: 0; }
+        .new-session-btn:hover { transform: scale(1.02); }
         .clear-btn { width: 100%; padding: 10px; background: #2a2a4e; color: #ff6b6b; border: none; border-radius: 8px; cursor: pointer; margin-top: 10px; }
         ::-webkit-scrollbar { width: 8px; }
         ::-webkit-scrollbar-track { background: #1a1a2e; }
@@ -278,10 +252,8 @@ def get_html_content():
 <body>
     <div class="sidebar">
         <div class="logo"><h1>Hermes Agent</h1><p>AI 智能助手</p></div>
-        <div style="padding:10px; border-bottom:1px solid #1f3a5f; margin-bottom:10px;">
-            <button class="clear-btn" onclick="createNewSession()" style="margin:0; background:linear-gradient(135deg, #00d9ff, #0099ff); color:white;">+ 新会话</button>
-        </div>
-        <div id="sessionList" style="padding:0 10px; max-height:200px; overflow-y:auto; margin-bottom:10px;"></div>
+        <div style="padding:10px;"><button class="new-session-btn" onclick="createNewSession()">+ 新会话</button></div>
+        <div id="sessionList" class="session-list"></div>
         <ul class="menu">
             <li class="menu-item active" data-page="chat">聊天对话</li>
             <li class="menu-item" data-page="memory">记忆管理</li>
@@ -305,9 +277,9 @@ def get_html_content():
                     <input type="file" id="imageInput" accept="image/*">
                     <input type="file" id="fileInput">
                     <div class="input-actions">
-                        <button class="action-btn" onclick="document.getElementById('imageInput').click()">Img</button>
-                        <button class="action-btn" onclick="document.getElementById('fileInput').click()">File</button>
-                        <button class="action-btn" id="sendBtn" onclick="sendMessage()">Send</button>
+                        <button class="action-btn" onclick="document.getElementById('imageInput').click()" title="上传图片">🖼️</button>
+                        <button class="action-btn" onclick="document.getElementById('fileInput').click()" title="上传文件">📎</button>
+                        <button class="action-btn" id="sendBtn" onclick="sendMessage()" title="发送">📤</button>
                     </div>
                 </div>
             </div>
@@ -356,33 +328,40 @@ function initMenu(){
         };
     }
 }
-
 function loadSessionList(){
     fetch('/api/sessions').then(function(r){return r.json();}).then(function(data){
         var html='';
         var sessions=data.sessions||[];
         for(var i=0;i<Math.min(sessions.length,10);i++){
             var s=sessions[i];
-            var isActive=s.id===CURRENT_SESSION?'style="background:rgba(0,217,255,0.2);border-left:3px solid #00d9ff;"':'';
-            html+='<div onclick="switchSession(\''+s.id+'\')" style="padding:10px;margin:4px 0;border-radius:8px;cursor:pointer;color:#888;'+isActive+'"><div style="font-size:13px;color:#e8e8e8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+(s.title||'未命名')+'</div><div style="font-size:11px;color:#666;">'+(s.created||'')+' · '+s.messages+'条</div></div>';
+            var activeClass=(s.id===CURRENT_SESSION)?'active':'';
+            html+='<div class="session-item '+activeClass+'" onclick="switchSession(\\''+s.id+'\\')">';
+            html+='<div class="session-title">'+(s.title||'未命名')+'</div>';
+            html+='<div class="session-meta">'+(s.created||'')+' | '+s.messages+'条</div>';
+            html+='</div>';
         }
         document.getElementById('sessionList').innerHTML=html;
     });
 }
-
 function createNewSession(){
     var now=new Date();
     var sessionName='session_'+now.toISOString().replace(/[:-]/g,'').split('.')[0].replace('T','_');
     CURRENT_SESSION=sessionName;
     chatMessages.innerHTML='';
-    addMessage('👋 新会话已创建，有什么可以帮你的吗？',false,null,false);
+    addMessage('✨ 新会话已创建！有什么可以帮你的吗？',false,null,false);
     loadSessionList();
 }
-
 function switchSession(sessionId){
     CURRENT_SESSION=sessionId;
     loadChatHistory();
     loadSessionList();
+    // 切换到聊天页面
+    var allItems=document.querySelectorAll('.menu-item');
+    for(var j=0;j<allItems.length;j++)allItems[j].classList.remove('active');
+    allItems[0].classList.add('active');
+    var allPages=document.querySelectorAll('.page');
+    for(var j=0;j<allPages.length;j++)allPages[j].classList.remove('active');
+    document.getElementById('page-chat').classList.add('active');
 }
 function setupInput(){
     messageInput.addEventListener('input',function(){this.style.height='auto';this.style.height=Math.min(this.scrollHeight,150)+'px';});
@@ -412,6 +391,7 @@ function handleImageSelect(e){var file=e.target.files[0];if(file){var reader=new
 function handleFileSelect(e){var file=e.target.files[0];if(file){currentFile=file;document.getElementById('filePreviewIcon').innerHTML=getFileIcon(file.name);document.getElementById('filePreviewName').textContent=file.name;document.getElementById('filePreviewSize').textContent=formatFileSize(file.size);filePreviewContainer.classList.add('show');}}
 function loadChatHistory(){
     var sessionKey='hermes_chat_'+CURRENT_SESSION;
+    // 先从 localStorage 加载
     try{
         var saved=localStorage.getItem(sessionKey);
         if(saved){
@@ -430,7 +410,7 @@ function loadChatHistory(){
             chatMessages.scrollTop=chatMessages.scrollHeight;
         }else{
             chatMessages.innerHTML='';
-            addMessage('👋 你好！我是 Hermes Agent，有什么可以帮你的吗？',false,null,false);
+            addMessage('👋 你好！我是 Hermes Agent，有什么可以帮你的吗？\n\n支持文字和图片提问，直接在输入框按 Ctrl+V / Cmd+V 粘贴图片即可。',false,null,false);
         }
     }catch(e){console.error('Load error:',e);}
 }
@@ -454,13 +434,36 @@ function addMessage(content,isUser,imageData,save){
     if(save===undefined)save=true;
     var div=document.createElement('div');
     div.className='message '+(isUser?'user':'assistant');
-    var html='<div class="message-avatar">'+(isUser?'U':'AI')+'</div><div class="message-content"><div class="message-text">'+content+'</div>';
+    var avatar=isUser?'👤':'🤖';
+    var html='<div class="message-avatar">'+avatar+'</div><div class="message-content"><div class="message-text">'+content+'</div>';
     if(imageData)html+='<img class="message-image" src="'+imageData+'">';
     html+='</div>';
     div.innerHTML=html;
     chatMessages.appendChild(div);
     chatMessages.scrollTop=chatMessages.scrollHeight;
     if(save)saveChatHistory();
+}
+
+function typeMessage(content){
+    var div=document.createElement('div');
+    div.className='message assistant';
+    var html='<div class="message-avatar">🤖</div><div class="message-content"><div class="message-text"></div></div>';
+    div.innerHTML=html;
+    chatMessages.appendChild(div);
+    var textDiv=div.querySelector('.message-text');
+    var i=0;
+    var speed=15;
+    function type(){
+        if(i<content.length){
+            textDiv.textContent+=content.charAt(i);
+            i++;
+            chatMessages.scrollTop=chatMessages.scrollHeight;
+            setTimeout(type,speed);
+        }else{
+            saveChatHistory();
+        }
+    }
+    type();
 }
 function sendMessage(){
     var message=messageInput.value.trim();
@@ -490,7 +493,7 @@ function sendRequest(formData,file){
     if(file)formData.append('file',file);
     fetch('/api/chat',{method:'POST',body:formData}).then(function(r){return r.json();}).then(function(data){
         removeLoading();
-        addMessage(data.response,false,null);
+        typeMessage(data.response);
         sendBtn.disabled=false;
         messageInput.focus();
     }).catch(function(err){
@@ -503,23 +506,23 @@ function showLoading(){
     var div=document.createElement('div');
     div.className='message assistant';
     div.id='loadingMsg';
-    div.innerHTML='<div class="message-avatar">AI</div><div class="message-content"><div class="typing-indicator"><div class="typing-dot" style="width:8px;height:8px;border-radius:50%;background:#00d9ff;display:inline-block;margin:0 2px;"></div><div class="typing-dot" style="width:8px;height:8px;border-radius:50%;background:#00d9ff;display:inline-block;margin:0 2px;"></div><div class="typing-dot" style="width:8px;height:8px;border-radius:50%;background:#00d9ff;display:inline-block;margin:0 2px;"></div></div></div>';
+    div.innerHTML='<div class="message-avatar">🤖</div><div class="message-content"><div class="typing-indicator"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div></div>';
     chatMessages.appendChild(div);
     chatMessages.scrollTop=chatMessages.scrollHeight;
 }
 function removeLoading(){var div=document.getElementById('loadingMsg');if(div)div.remove();}
-function clearChatHistory(){if(confirm('确定清空所有聊天记录？')){localStorage.removeItem(CHAT_KEY);chatMessages.innerHTML='';addMessage('对话已清空',false,null,false);}}
-function loadMemory(){renderList.currentPage="memory";fetch('/api/memory').then(function(r){return r.json();}).then(renderList);}
-function loadSkills(){renderList.currentPage="skills";fetch('/api/skills').then(function(r){return r.json();}).then(renderList);}
-function loadSessions(){renderList.currentPage="sessions";fetch('/api/sessions').then(function(r){return r.json();}).then(renderList);}
-function loadCron(){renderRaw.currentPage="cron";fetch('/api/cron').then(function(r){return r.json();}).then(renderRaw);}
-function loadProjects(){renderList.currentPage="projects";fetch('/api/projects').then(function(r){return r.json();}).then(renderList);}
-function loadCosts(){renderStats.currentPage="costs";fetch('/api/costs').then(function(r){return r.json();}).then(renderStats);}
-function loadPatterns(){renderStats.currentPage="patterns";fetch('/api/patterns').then(function(r){return r.json();}).then(renderStats);}
+function clearChatHistory(){if(confirm('确定清空当前对话？')){var sessionKey='hermes_chat_'+CURRENT_SESSION;localStorage.removeItem(sessionKey);chatMessages.innerHTML='';addMessage('对话已清空',false,null,false);}}
+function loadMemory(){renderList.currentPage='memory';fetch('/api/memory').then(function(r){return r.json();}).then(renderList);}
+function loadSkills(){renderList.currentPage='skills';fetch('/api/skills').then(function(r){return r.json();}).then(renderList);}
+function loadSessions(){renderList.currentPage='sessions';fetch('/api/sessions').then(function(r){return r.json();}).then(renderList);}
+function loadCron(){renderRaw.currentPage='cron';fetch('/api/cron').then(function(r){return r.json();}).then(renderRaw);}
+function loadProjects(){renderList.currentPage='projects';fetch('/api/projects').then(function(r){return r.json();}).then(renderList);}
+function loadCosts(){renderStats.currentPage='costs';fetch('/api/costs').then(function(r){return r.json();}).then(renderStats);}
+function loadPatterns(){renderStats.currentPage='patterns';fetch('/api/patterns').then(function(r){return r.json();}).then(renderStats);}
 function renderList(data){
     var html='<div class="card"><ul class="data-list">';
     if(data.skills){for(var i=0;i<data.skills.length;i++){var s=data.skills[i];html+='<li><strong>'+s.name+'</strong> <span style="color:#00d9ff;">'+s.category+'</span><br><small>'+(s.description||'')+'</small></li>';}}
-    else if(data.sessions){for(var i=0;i<data.sessions.length;i++){var s=data.sessions[i];html+='<li><strong>'+(s.title||'未命名')+'</strong><br><small>'+(s.created||'')+' | '+s.messages+'条消息</small></li>';}}
+    else if(data.sessions){for(var i=0;i<data.sessions.length;i++){var s=data.sessions[i];html+='<li><strong>'+(s.title||'未命名')+'</strong><br><small>'+(s.created||'')+' | '+s.messages+'条</small></li>';}}
     else if(data.projects||data.daily){var items=data.projects||data.daily;for(var i=0;i<items.length;i++)html+='<li>'+items[i]+'</li>';}
     else{html+='<li>暂无数据</li>';}
     html+='</ul></div>';
