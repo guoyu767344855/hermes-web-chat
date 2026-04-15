@@ -401,13 +401,13 @@ function showLoading(){
 }
 function removeLoading(){var div=document.getElementById('loadingMsg');if(div)div.remove();}
 function clearChatHistory(){if(confirm('确定清空所有聊天记录？')){localStorage.removeItem(CHAT_KEY);chatMessages.innerHTML='';addMessage('对话已清空',false,null,false);}}
-function loadMemory(){fetch('/api/memory').then(function(r){return r.json();}).then(renderList);}
-function loadSkills(){fetch('/api/skills').then(function(r){return r.json();}).then(renderList);}
-function loadSessions(){fetch('/api/sessions').then(function(r){return r.json();}).then(renderList);}
-function loadCron(){fetch('/api/cron').then(function(r){return r.json();}).then(renderRaw);}
-function loadProjects(){fetch('/api/projects').then(function(r){return r.json();}).then(renderList);}
-function loadCosts(){fetch('/api/costs').then(function(r){return r.json();}).then(renderStats);}
-function loadPatterns(){fetch('/api/patterns').then(function(r){return r.json();}).then(renderStats);}
+function loadMemory(){renderMemory.currentPage="memory";fetch('/api/memory').then(function(r){return r.json();}).then(renderList);}
+function loadSkills(){renderSkills.currentPage="skills";fetch('/api/skills').then(function(r){return r.json();}).then(renderList);}
+function loadSessions(){renderSessions.currentPage="sessions";fetch('/api/sessions').then(function(r){return r.json();}).then(renderList);}
+function loadCron(){renderCron.currentPage="cron";fetch('/api/cron').then(function(r){return r.json();}).then(renderRaw);}
+function loadProjects(){renderProjects.currentPage="projects";fetch('/api/projects').then(function(r){return r.json();}).then(renderList);}
+function loadCosts(){renderCosts.currentPage="costs";fetch('/api/costs').then(function(r){return r.json();}).then(renderStats);}
+function loadPatterns(){renderPatterns.currentPage="patterns";fetch('/api/patterns').then(function(r){return r.json();}).then(renderStats);}
 function renderList(data){
     var html='<div class="card"><ul class="data-list">';
     if(data.skills){for(var i=0;i<data.skills.length;i++){var s=data.skills[i];html+='<li><strong>'+s.name+'</strong> <span style="color:#00d9ff;">'+s.category+'</span><br><small>'+(s.description||'')+'</small></li>';}}
@@ -415,12 +415,12 @@ function renderList(data){
     else if(data.projects||data.daily){var items=data.projects||data.daily;for(var i=0;i<items.length;i++)html+='<li>'+items[i]+'</li>';}
     else{html+='<li>暂无数据</li>';}
     html+='</ul></div>';
-    var page=event.target.closest('.page').id.replace('page-','');
+    var page=renderList.currentPage||'memory';
     document.getElementById(page+'-content').innerHTML=html;
 }
 function renderRaw(data){
     var html='<div class="card"><pre style="background:#0f0f1a;padding:15px;border-radius:8px;white-space:pre-wrap;">'+(data.raw||'暂无数据')+'</pre></div>';
-    var page=event.target.closest('.page').id.replace('page-','');
+    var page=renderRaw.currentPage||'cron';
     document.getElementById(page+'-content').innerHTML=html;
 }
 function renderStats(data){
@@ -430,7 +430,7 @@ function renderStats(data){
     if(data.estimated_cost)html+='<div class="stat-card"><div class="stat-value">'+data.estimated_cost+'</div><div class="stat-label">费用</div></div>';
     if(data.peak_hour)html+='<div class="stat-card"><div class="stat-value">'+data.peak_hour+':00</div><div class="stat-label">高峰时段</div></div>';
     html+='</div>';
-    var page=event.target.closest('.page').id.replace('page-','');
+    var page=renderStats.currentPage||'costs';
     document.getElementById(page+'-content').innerHTML=html;
 }
     </script>
