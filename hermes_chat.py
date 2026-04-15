@@ -60,9 +60,33 @@ def get_cron_data():
     except: return {"raw": ""}
 
 def get_projects_data():
-    memory_file = HERMES_HOME / "MEMORY.md"
-    projects = [line.strip() for line in memory_file.read_text().split('\n') if '项目' in line] if memory_file.exists() else []
-    return {"projects": projects or ["项目 1", "项目 2"], "count": len(projects)}
+    # 尝试多个可能的 MEMORY.md 路径
+    possible_paths = [
+        HERMES_HOME / "memories" / "MEMORY.md",
+        HERMES_HOME / "MEMORY.md",
+        Path.home() / ".hermes" / "memories" / "MEMORY.md",
+        Path.home() / ".Hermes" / "memories" / "MEMORY.md",
+    ]
+    projects = []
+    for p in possible_paths:
+        if p.exists():
+            content = p.read_text()
+            # 提取项目信息
+            current_project = []
+            for line in content.split('\n'):
+                if '🎯 重要项目' in line:
+                    if current_project:
+                        projects.append(' '.join(current_project))
+                    current_project = [line.strip()]
+                elif current_project and ('**' in line or line.strip().startswith('-')):
+                    current_project.append(line.strip())
+                elif current_project and line.strip() == '---':
+                    projects.append(' '.join(current_project))
+                    current_project = []
+            if current_project:
+                projects.append(' '.join(current_project))
+            break
+    return {"projects": projects or ["暂无项目数据"], "count": len(projects)}
 
 def get_costs_data():
     sessions_dir = HERMES_HOME / "sessions"
