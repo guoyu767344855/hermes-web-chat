@@ -305,7 +305,6 @@ window.onload=function(){
     filePreviewContainer=document.getElementById('filePreviewContainer');
     sendBtn=document.getElementById('sendBtn');
     initMenu();
-    loadSessionList();
     loadChatHistory();
     setupInput();
 };
@@ -330,29 +329,7 @@ function initMenu(){
         };
     }
 }
-function loadSessionList(){
-    fetch('/api/sessions').then(function(r){return r.json();}).then(function(data){
-        var html='';
-        var sessions=data.sessions||[];
-        for(var i=0;i<Math.min(sessions.length,10);i++){
-            var s=sessions[i];
-            var activeClass=(s.id===CURRENT_SESSION)?'active':'';
-            html+='<div class="session-item '+activeClass+'" onclick="switchSession(\\''+s.id+'\\')">';
-            html+='<div class="session-title">'+(s.title||'未命名')+'</div>';
-            html+='<div class="session-meta">'+(s.created||'')+' | '+s.messages+'条</div>';
-            html+='</div>';
-        }
-        document.getElementById('sessionList').innerHTML=html;
-    });
-}
-function createNewSession(){
-    var now=new Date();
-    var sessionName='session_'+now.toISOString().replace(/[:-]/g,'').split('.')[0].replace('T','_');
-    CURRENT_SESSION=sessionName;
-    chatMessages.innerHTML='';
-    addMessage('✨ 新会话已创建！有什么可以帮你的吗？',false,null,false);
-    updateSessionTitle();
-}
+
 function switchSession(sessionId){
     CURRENT_SESSION=sessionId;
     loadChatHistory();
