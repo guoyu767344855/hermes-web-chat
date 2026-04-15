@@ -15,31 +15,50 @@ UPLOAD_DIR = HERMES_HOME / "web-chat" / "uploads"
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 def get_memory_data():
-    memory_file = HERMES_HOME / "MEMORY.md"
-    if not memory_file.exists(): return {"daily": [], "long_term": []}
+    # 尝试多个可能的 MEMORY.md 路径
+    possible_paths = [
+        HERMES_HOME / "memories" / "MEMORY.md",
+        HERMES_HOME / "MEMORY.md",
+        Path.home() / ".hermes" / "memories" / "MEMORY.md",
+        Path.home() / ".Hermes" / "memories" / "MEMORY.md",
+    ]
+    memory_file = None
+    for p in possible_paths:
+        if p.exists():
+            memory_file = p
+            break
+    if not memory_file:
+        return {"daily": [], "long_term": [], "file_path": None}
+    
     content = memory_file.read_text()
-    daily, long_term, current = [], [], []
+    daily, current = [], []
     for line in content.split('\n'):
         if line.startswith('> 2026-') or line.startswith('> 2025-'):
             if current: daily.append('\n'.join(current))
             current = [line]
-        elif line.strip() and current: current.append(line)
+        elif line.strip() and current:
+            current.append(line)
         elif line.startswith('§'):
-            if current: daily.append('\n'.join(current))
-            current = []
+            if current:
+                daily.append('\n'.join(current))
+                current = []
     if current: daily.append('\n'.join(current))
-    return {"daily": daily[-20:], "long_term": long_term[:20]}
+    return {"daily": daily[-20:], "long_term": [], "file_path": str(memory_file)}
 
 def get_skills_data():
     try:
         result = subprocess.run(["hermes", "skills", "list"], capture_output=True, text=True, timeout=30, env={**os.environ, "HERMES_HOME": str(HERMES_HOME)})
         skills = []
         for line in result.stdout.strip().split('\n'):
-            if line.strip() and '|' in line:
-                parts = [p.strip() for p in line.split('|') if p.strip()]
-                if len(parts) >= 2: skills.append({"name": parts[0], "category": parts[1], "description": parts[2] if len(parts) > 2 else ""})
+            # 使用正确的表格分隔符 │ (U+2502)
+            if line.strip() and '│' in line and 'Name' not in line and '━━' not in line:
+                parts = [p.strip() for p in line.split('│') if p.strip()]
+                if len(parts) >= 2 and parts[0].strip() and not parts[0].startswith('┡'):
+                    skills.append({"name": parts[0], "category": parts[1] if len(parts) > 1 else "", "description": ""})
         return {"skills": skills, "count": len(skills)}
-    except: return {"skills": [], "count": 0}
+    except Exception as e: 
+        print(f"Skills error: {e}")
+        return {"skills": [], "count": 0}
 
 def get_sessions_data():
     sessions_dir = HERMES_HOME / "sessions"
