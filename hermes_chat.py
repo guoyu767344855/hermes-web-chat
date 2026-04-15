@@ -33,16 +33,19 @@ def get_memory_data():
     content = memory_file.read_text()
     daily, current = [], []
     for line in content.split('\n'):
-        if line.startswith('> 2026-') or line.startswith('> 2025-'):
+        # 匹配日期格式：> 2026- 或 2026-03-16 记忆记录
+        if line.startswith('> 2026-') or line.startswith('> 2025-') or (len(line) > 10 and line[0:4].isdigit() and line[4:5] == '-'):
             if current: daily.append('\n'.join(current))
             current = [line]
         elif line.strip() and current:
             current.append(line)
-        elif line.startswith('§'):
+        elif line.startswith('§') or line.strip() == '---':
             if current:
                 daily.append('\n'.join(current))
                 current = []
     if current: daily.append('\n'.join(current))
+    # 过滤掉空项目和标题行
+    daily = [d for d in daily if d.strip() and not d.startswith('> 这里保存')]
     return {"daily": daily[-20:], "long_term": [], "file_path": str(memory_file)}
 
 def get_skills_data():
