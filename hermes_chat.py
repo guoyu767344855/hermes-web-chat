@@ -740,7 +740,7 @@ function sendStreamRequest(formData,file){
         position=xhr.responseText.length;
         buffer+=text;
         
-        var lines=buffer.split('\n');
+        var lines=buffer.split('\\n');
         buffer=lines.pop()||'';
         
         for(var i=0;i<lines.length;i++){
@@ -760,7 +760,7 @@ function sendStreamRequest(formData,file){
     
     xhr.onload=function(){
         if(xhr.status!==200){
-            textDiv.textContent+='\n[发送失败]';
+            textDiv.textContent+='\\n[发送失败]';
         }
         sendBtn.disabled=false;
         messageInput.focus();
@@ -768,7 +768,7 @@ function sendStreamRequest(formData,file){
     };
     
     xhr.onerror=function(){
-        textDiv.textContent+='\n[网络错误]';
+        textDiv.textContent+='\\n[网络错误]';
         sendBtn.disabled=false;
         messageInput.focus();
     };
