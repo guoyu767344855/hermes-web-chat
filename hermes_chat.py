@@ -726,16 +726,23 @@ function sendRequest(formData,file){
 
 function sendStreamRequest(formData,file){
     if(file)formData.append('file',file);
-    removeLoading();
-    var assistantDiv=createAssistantMessage();
-    var textDiv=assistantDiv.querySelector('.message-text');
+    showLoading(); // 显示打字动画
     var buffer='';
+    var assistantDiv=null;
+    var textDiv=null;
     
     var xhr=new XMLHttpRequest();
     xhr.open('POST','/api/chat_stream',true);
     
     var position=0;
     xhr.onprogress=function(){
+        // 移除加载动画，创建消息框（第一次收到数据时）
+        if(!assistantDiv){
+            removeLoading();
+            assistantDiv=createAssistantMessage();
+            textDiv=assistantDiv.querySelector('.message-text');
+        }
+        
         var text=xhr.responseText.substring(position);
         position=xhr.responseText.length;
         buffer+=text;
@@ -753,14 +760,16 @@ function sendStreamRequest(formData,file){
                     saveChatHistory();
                     return;
                 }
-                typeText(data, textDiv);
+                // 直接追加完整数据块，避免逐字破坏中文
+                textDiv.textContent+=data;
+                chatMessages.scrollTop=chatMessages.scrollHeight;
             }
         }
     };
     
     xhr.onload=function(){
         if(xhr.status!==200){
-            textDiv.textContent+='\\n[发送失败]';
+            if(textDiv) textDiv.textContent+='\\n[发送失败]';
         }
         sendBtn.disabled=false;
         messageInput.focus();
@@ -768,7 +777,7 @@ function sendStreamRequest(formData,file){
     };
     
     xhr.onerror=function(){
-        textDiv.textContent+='\\n[网络错误]';
+        if(textDiv) textDiv.textContent+='\\n[网络错误]';
         sendBtn.disabled=false;
         messageInput.focus();
     };
@@ -794,7 +803,7 @@ function typeText(text, textDiv){
 function createAssistantMessage(){
     var div=document.createElement('div');
     div.className='message assistant';
-    var html='<div class="message-avatar">🤖</div><div class="message-content"><div class="message-text\"></div></div>';
+    var html='<div class="message-avatar">🤖</div><div class="message-content"><div class="message-text"></div></div>';
     div.innerHTML=html;
     chatMessages.appendChild(div);
     chatMessages.scrollTop=chatMessages.scrollHeight;
