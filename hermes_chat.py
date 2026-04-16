@@ -163,19 +163,30 @@ async def get_chat_page(): return HTMLResponse(content=get_html_content())
 @app.post("/api/chat")
 async def chat(message: str = Form(...), image: UploadFile = File(None), file: UploadFile = File(None)):
     image_path, file_path = None, None
-    if image:
-        tp = tempfile.mktemp(suffix=".png", dir=str(UPLOAD_DIR))
-        with open(tp, "wb") as f: f.write(await image.read())
-        image_path = tp
-    if file:
-        tp = tempfile.mktemp(suffix=f"_{file.filename}", dir=str(UPLOAD_DIR))
-        with open(tp, "wb") as f: f.write(await file.read())
-        file_path = tp
-    msg = f"{message}\n\n[文件：{file.filename}]" if file and file.filename else message
-    response = call_hermes(msg or "请分析", image_path)
-    for p in [image_path, file_path]:
-        if p and os.path.exists(p): os.remove(p)
-    return JSONResponse(content={"response": response})
+    try:
+        if image:
+            content = await image.read()
+            print(f"Received image: {image.filename}, size: {len(content)} bytes")
+            tp = tempfile.mktemp(suffix=".png", dir=str(UPLOAD_DIR))
+            with open(tp, "wb") as f: f.write(content)
+            image_path = tp
+            print(f"Image saved to: {image_path}")
+        if file:
+            content = await file.read()
+            print(f"Received file: {file.filename}, size: {len(content)} bytes")
+            tp = tempfile.mktemp(suffix=f"_{file.filename}", dir=str(UPLOAD_DIR))
+            with open(tp, "wb") as f: f.write(content)
+            file_path = tp
+        msg = f"{message}\n\n[文件：{file.filename}]" if file and file.filename else message
+        print(f"Calling hermes with message: {msg[:100]}..., image_path: {image_path}")
+        response = call_hermes(msg or "请分析", image_path)
+        print(f"Hermes response: {response[:200]}...")
+        for p in [image_path, file_path]:
+            if p and os.path.exists(p): os.remove(p)
+        return JSONResponse(content={"response": response})
+    except Exception as e:
+        print(f"Chat error: {e}")
+        return JSONResponse(content={"response": f"错误：{e}"})
 
 @app.get("/api/memory")
 async def api_memory(): return JSONResponse(content=get_memory_data())
@@ -547,14 +558,18 @@ function sendMessage(){
     messageInput.value='';
     messageInput.style.height='auto';
     var fileToSend=currentFile;
+    var imageToSend=currentImage;
     removeImage();
     removeFile();
     showLoading();
     var formData=new FormData();
     formData.append('message',message||'请分析');
-    if(currentImage){
-        fetch(currentImage).then(function(r){return r.blob();}).then(function(blob){
+    if(imageToSend){
+        fetch(imageToSend).then(function(r){return r.blob();}).then(function(blob){
             formData.append('image',blob,'image.png');
+            sendRequest(formData,fileToSend);
+        }).catch(function(err){
+            console.error('Load image error:',err);
             sendRequest(formData,fileToSend);
         });
     }else{sendRequest(formData,fileToSend);}
