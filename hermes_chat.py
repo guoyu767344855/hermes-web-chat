@@ -222,13 +222,13 @@ def get_html_content():
         .page.active { display: flex; }
         .page-header { padding: 20px 30px; border-bottom: 1px solid #1f3a5f; background: rgba(15, 15, 26, 0.8); }
         .page-header h2 { font-size: 18px; color: #e8e8e8; }
-        .chat-messages { flex: 1; overflow-y: auto; padding: 30px; display: flex; flex-direction: column; gap: 20px; }
+        .chat-messages { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 30px; display: flex; flex-direction: column; gap: 20px; }
         .message { display: flex; gap: 15px; max-width: 80%; }
         .message.user { align-self: flex-end; flex-direction: row-reverse; }
-        .message-avatar { width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 20px; }
-        .message-content { background: #1a1a2e; padding: 15px 20px; border-radius: 16px; border: 1px solid #2a2a4e; }
-        .message-text { color: #e8e8e8; line-height: 1.6; font-size: 15px; white-space: pre-wrap; }
-        .message-image { max-width: 300px; border-radius: 10px; margin-top: 10px; border: 2px solid #2a2a4e; }
+        .message-avatar { width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 20px; flex-shrink: 0; }
+        .message-content { background: #1a1a2e; padding: 15px 20px; border-radius: 16px; border: 1px solid #2a2a4e; max-width: 100%; overflow-wrap: break-word; word-wrap: break-word; word-break: break-word; }
+        .message-text { color: #e8e8e8; line-height: 1.6; font-size: 15px; white-space: pre-wrap; overflow-wrap: break-word; word-wrap: break-word; word-break: break-word; max-width: 100%; }
+        .message-image { max-width: 100%; max-height: 400px; border-radius: 10px; margin-top: 10px; border: 2px solid #2a2a4e; }
         .input-container { padding: 20px 30px; background: rgba(15, 15, 26, 0.95); border-top: 1px solid #1f3a5f; }
         .input-wrapper { display: flex; gap: 15px; align-items: flex-end; background: #1a1a2e; border: 2px solid #2a2a4e; border-radius: 24px; padding: 8px 8px 8px 20px; }
         #messageInput { flex: 1; background: transparent; border: none; outline: none; color: #e8e8e8; font-size: 15px; padding: 10px 0; resize: none; max-height: 150px; font-family: inherit; }
