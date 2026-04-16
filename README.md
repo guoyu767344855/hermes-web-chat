@@ -146,6 +146,21 @@ python3 hermes_chat.py 9000
 
 ## 📝 更新日志
 
+### v1.3.0 (2026-04-16)
+
+**🐛 Bug 修复**
+- 修复点击会话历史中的会话后无法显示消息记录的问题
+
+**✨ 新功能**
+- 添加 `/api/session_detail` API 端点
+- 从服务器加载历史会话的完整消息
+- 加载后自动缓存到 localStorage
+
+**🔧 技术实现**
+- `get_session_detail()` 函数读取会话 JSON 文件
+- `loadSessionDetail()` 优先从 localStorage 加载，不存在则从服务器加载
+- `renderChatHistory()` 统一渲染消息历史
+
 ### v1.2.0 (2026-04-16)
 
 **✨ 新功能**
