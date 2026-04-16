@@ -146,6 +146,19 @@ python3 hermes_chat.py 9000
 
 ## 📝 更新日志
 
+### v1.4.0 (2026-04-16)
+
+**🐛 Bug 修复**
+- 修复会话框出现左右滚动条问题
+- 修复技能列表显示为空问题
+
+**🎨 CSS 优化**
+- `.chat-messages` 添加 `overflow-x: hidden`
+- `.message-avatar` 添加 `flex-shrink: 0` 防止压缩
+- `.message-content` 和 `.message-text` 添加 `overflow-wrap: break-word`
+- `.message-image` 改为 `max-width: 100%`, `max-height: 400px`
+- 所有文本内容支持自动换行，适应不同屏幕宽度
+
 ### v1.3.0 (2026-04-16)
 
 **🐛 Bug 修复**
