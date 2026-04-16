@@ -2,10 +2,10 @@
 Hermes Agent Web Chat - 跨平台版本 (Windows/Mac/Linux)
 """
 from fastapi import FastAPI, Form, UploadFile, File
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from pathlib import Path
 import subprocess, tempfile, os, json, glob, sys, shutil, platform
-from typing import Optional
+from typing import Optional, Generator
 import uvicorn
 from datetime import datetime
 
@@ -178,6 +178,38 @@ def get_patterns_data():
             except: continue
     return {"hourly": hourly, "daily": dict(sorted(daily.items(), reverse=True)[:14]), "peak_hour": max(hourly.keys(), key=lambda k: hourly[k]) if any(hourly.values()) else "N/A"}
 
+def call_hermes_stream(message: str, image_path: Optional[str] = None) -> Generator[str, None, None]:
+    """流式调用 hermes，实时返回输出"""
+    try:
+        hermes_cmd = get_hermes_cmd()
+        if not hermes_cmd:
+            yield "错误：找不到 hermes 命令，请确认已正确安装\n"
+            return
+        
+        cmd = [hermes_cmd, "chat", "-q", message or "你好", "--source", "web"]
+        if image_path: cmd.extend(["--image", image_path])
+        
+        # 使用 Popen 实现流式输出
+        process = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+            env={**os.environ, "HERMES_HOME": str(HERMES_HOME)}
+        )
+        
+        # 实时读取输出
+        for line in process.stdout:
+            if line.strip():
+                yield line
+        
+        process.wait()
+    except subprocess.TimeoutExpired:
+        yield "请求超时\n"
+    except Exception as e:
+        yield f"错误：{e}\n"
+
 def call_hermes(message: str, image_path: Optional[str] = None) -> str:
     try:
         # 跨平台查找 hermes 命令
@@ -211,17 +243,15 @@ async def chat(message: str = Form(...), image: UploadFile = File(None), file: U
             print(f"Received file: {file.filename}, size: {len(content)} bytes, content_type: {file.content_type}")
             file_path = tempfile.mktemp(suffix=f"_{file.filename}", dir=str(UPLOAD_DIR))
             with open(file_path, "wb") as f: f.write(content)
-            # 尝试读取文件内容（如果是文本文件）
             try:
                 file_content = content.decode('utf-8')
                 print(f"File content (text): {len(file_content)} chars")
             except:
                 print("File is binary, cannot read as text")
-        # 构建消息
         msg = message or "请分析"
         if file and file.filename:
             if file_content:
-                msg = f"{msg}\n\n[文件：{file.filename}]\n文件内容:\n{file_content[:10000]}"  # 限制内容长度
+                msg = f"{msg}\n\n[文件：{file.filename}]\n文件内容:\n{file_content[:10000]}"
             else:
                 msg = f"{msg}\n\n[文件：{file.filename}]\n这是一个二进制文件，已保存到：{file_path}"
         print(f"Calling hermes with message: {msg[:100]}..., image_path: {image_path}")
@@ -232,6 +262,45 @@ async def chat(message: str = Form(...), image: UploadFile = File(None), file: U
         return JSONResponse(content={"response": response})
     except Exception as e:
         print(f"Chat error: {e}")
+        return JSONResponse(content={"response": f"错误：{e}"})
+
+@app.post("/api/chat_stream")
+async def chat_stream(message: str = Form(...), image: UploadFile = File(None), file: UploadFile = File(None)):
+    """流式聊天接口"""
+    image_path, file_path = None, None
+    file_content = None
+    try:
+        if image:
+            content = await image.read()
+            tp = tempfile.mktemp(suffix=".png", dir=str(UPLOAD_DIR))
+            with open(tp, "wb") as f: f.write(content)
+            image_path = tp
+        if file:
+            content = await file.read()
+            file_path = tempfile.mktemp(suffix=f"_{file.filename}", dir=str(UPLOAD_DIR))
+            with open(file_path, "wb") as f: f.write(content)
+            try:
+                file_content = content.decode('utf-8')
+            except:
+                pass
+        msg = message or "请分析"
+        if file and file.filename:
+            if file_content:
+                msg = f"{msg}\n\n[文件：{file.filename}]\n文件内容:\n{file_content[:10000]}"
+            else:
+                msg = f"{msg}\n\n[文件：{file.filename}]\n这是一个二进制文件"
+        
+        def generate():
+            for chunk in call_hermes_stream(msg, image_path):
+                yield f"data: {chunk}\n\n"
+            # 清理临时文件
+            for p in [image_path, file_path]:
+                if p and os.path.exists(p): os.remove(p)
+            yield "data: [DONE]\n\n"
+        
+        return StreamingResponse(generate(), media_type="text/event-stream")
+    except Exception as e:
+        print(f"Stream error: {e}")
         return JSONResponse(content={"response": f"错误：{e}"})
 
 @app.get("/api/memory")
@@ -611,15 +680,14 @@ function sendMessage(){
     var formData=new FormData();
     formData.append('message',message||'请分析');
     if(imageToSend){
-        // 将 base64 或 URL 转换为 blob
         dataURLtoBlob(imageToSend).then(function(blob){
             formData.append('image',blob,'image.png');
-            sendRequest(formData,fileToSend);
+            sendStreamRequest(formData,fileToSend);
         }).catch(function(err){
             console.error('Convert image error:',err);
-            sendRequest(formData,fileToSend);
+            sendStreamRequest(formData,fileToSend);
         });
-    }else{sendRequest(formData,fileToSend);}
+    }else{sendStreamRequest(formData,fileToSend);}
 }
 
 // 将 dataURL 或 URL 转换为 blob
@@ -653,6 +721,62 @@ function sendRequest(formData,file){
         addMessage('发送失败：'+err.message,false,null);
         sendBtn.disabled=false;
     });
+}
+
+function sendStreamRequest(formData,file){
+    if(file)formData.append('file',file);
+    // 使用 EventSource 接收流式响应
+    removeLoading(); // 移除加载动画，准备接收流式内容
+    var assistantDiv=createAssistantMessage(); // 创建助手消息框
+    var textDiv=assistantDiv.querySelector('.message-text');
+    var fullText='';
+    
+    var xhr=new XMLHttpRequest();
+    xhr.open('POST','/api/chat_stream',true);
+    xhr.onreadystatechange=function(){
+        if(xhr.readyState===3){ // 接收中
+            var text=xhr.responseText;
+            var lines=text.split('\\n\\n');
+            for(var i=0;i<lines.length;i++){
+                var line=lines[i];
+                if(line.startsWith('data: ')){
+                    var data=line.substring(6);
+                    if(data==='[DONE]'){
+                        sendBtn.disabled=false;
+                        messageInput.focus();
+                        saveChatHistory();
+                        return;
+                    }
+                    fullText+=data;
+                    textDiv.textContent=fullText;
+                    chatMessages.scrollTop=chatMessages.scrollHeight;
+                }
+            }
+        }else if(xhr.readyState===4){
+            if(xhr.status!==200){
+                textDiv.textContent+='\\n[发送失败]';
+            }
+            sendBtn.disabled=false;
+            messageInput.focus();
+            saveChatHistory();
+        }
+    };
+    xhr.onerror=function(){
+        textDiv.textContent+='\\n[网络错误]';
+        sendBtn.disabled=false;
+        messageInput.focus();
+    };
+    xhr.send(formData);
+}
+
+function createAssistantMessage(){
+    var div=document.createElement('div');
+    div.className='message assistant';
+    var html='<div class="message-avatar">🤖</div><div class="message-content"><div class="message-text\"></div></div>';
+    div.innerHTML=html;
+    chatMessages.appendChild(div);
+    chatMessages.scrollTop=chatMessages.scrollHeight;
+    return div;
 }
 
 function showLoading(){
