@@ -150,7 +150,9 @@ def get_patterns_data():
 
 def call_hermes(message: str, image_path: Optional[str] = None) -> str:
     try:
-        cmd = ["hermes", "chat", "-q", message or "你好", "-Q", "--source", "web"]
+        # 使用完整路径
+        hermes_cmd = "/Users/guomin/.local/bin/hermes"
+        cmd = [hermes_cmd, "chat", "-q", message or "你好", "-Q", "--source", "web"]
         if image_path: cmd.extend(["--image", image_path])
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=300, env={**os.environ, "HERMES_HOME": str(HERMES_HOME)})
         return result.stdout.strip() or result.stderr.strip() or "没有回复"
@@ -163,6 +165,7 @@ async def get_chat_page(): return HTMLResponse(content=get_html_content())
 @app.post("/api/chat")
 async def chat(message: str = Form(...), image: UploadFile = File(None), file: UploadFile = File(None)):
     image_path, file_path = None, None
+    file_content = None
     try:
         if image:
             content = await image.read()
@@ -173,13 +176,24 @@ async def chat(message: str = Form(...), image: UploadFile = File(None), file: U
             print(f"Image saved to: {image_path}")
         if file:
             content = await file.read()
-            print(f"Received file: {file.filename}, size: {len(content)} bytes")
-            tp = tempfile.mktemp(suffix=f"_{file.filename}", dir=str(UPLOAD_DIR))
-            with open(tp, "wb") as f: f.write(content)
-            file_path = tp
-        msg = f"{message}\n\n[文件：{file.filename}]" if file and file.filename else message
+            print(f"Received file: {file.filename}, size: {len(content)} bytes, content_type: {file.content_type}")
+            file_path = tempfile.mktemp(suffix=f"_{file.filename}", dir=str(UPLOAD_DIR))
+            with open(file_path, "wb") as f: f.write(content)
+            # 尝试读取文件内容（如果是文本文件）
+            try:
+                file_content = content.decode('utf-8')
+                print(f"File content (text): {len(file_content)} chars")
+            except:
+                print("File is binary, cannot read as text")
+        # 构建消息
+        msg = message or "请分析"
+        if file and file.filename:
+            if file_content:
+                msg = f"{msg}\n\n[文件：{file.filename}]\n文件内容:\n{file_content[:10000]}"  # 限制内容长度
+            else:
+                msg = f"{msg}\n\n[文件：{file.filename}]\n这是一个二进制文件，已保存到：{file_path}"
         print(f"Calling hermes with message: {msg[:100]}..., image_path: {image_path}")
-        response = call_hermes(msg or "请分析", image_path)
+        response = call_hermes(msg, image_path)
         print(f"Hermes response: {response[:200]}...")
         for p in [image_path, file_path]:
             if p and os.path.exists(p): os.remove(p)
