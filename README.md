@@ -146,6 +146,14 @@ python3 hermes_chat.py 9000
 
 ## 📝 更新日志
 
+### v1.5.0 (2026-04-16)
+
+**🎨 UI 优化**
+- 将时间筛选器移到刷新按钮后面，水平排列
+- `.page-header h2` 使用 flex 布局，`gap: 12px`
+- `.filter-bar` 改为 `inline-flex`，移除 `margin-left`
+- `.refresh-btn` 添加 `font-size: 13px` 统一大小
+
 ### v1.4.0 (2026-04-16)
 
 **🐛 Bug 修复**
