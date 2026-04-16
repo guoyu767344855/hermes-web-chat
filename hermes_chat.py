@@ -861,5 +861,24 @@ if __name__ == "__main__":
     if len(sys.argv) > 1:
         try: port = int(sys.argv[1])
         except: pass
-    print("\n" + "="*50 + "\n Hermes Agent Web Chat\n" + "="*50 + "\n Access: http://localhost:" + str(port) + "\n" + "="*50 + "\n")
+    
+    # 确保 PATH 包含常见安装路径
+    if platform.system() == "Windows":
+        extra_paths = [
+            str(Path.home() / ".local" / "bin"),
+            r"C:\Program Files\Hermes",
+            r"C:\Users\Public\Hermes",
+        ]
+    else:
+        extra_paths = [
+            str(Path.home() / ".local" / "bin"),
+            "/opt/homebrew/bin",
+            "/usr/local/bin",
+        ]
+    
+    current_path = os.environ.get("PATH", "")
+    new_path = os.pathsep.join(extra_paths + [current_path])
+    os.environ["PATH"] = new_path
+    
+    print("\n" + "="*50 + "\n Hermes Agent Web Chat\n" + "="*50 + f"\n Access: http://localhost:{port}\n" + "="*50 + "\n")
     uvicorn.run(app, host="127.0.0.1", port=port)
