@@ -209,7 +209,7 @@ def get_html_content():
         .logo h1 { font-size: 24px; background: linear-gradient(135deg, #00d9ff 0%, #00ff88 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
         .logo p { color: #666; font-size: 12px; margin-top: 5px; }
         .page-header { padding: 20px 30px; border-bottom: 1px solid #1f3a5f; background: rgba(15, 15, 26, 0.8); display: flex; justify-content: space-between; align-items: center; }
-        .page-header h2 { font-size: 18px; color: #e8e8e8; margin: 0; }
+        .page-header h2 { font-size: 18px; color: #e8e8e8; margin: 0; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
         .header-actions { display: flex; gap: 8px; }
         .header-btn { width: 32px; height: 32px; border-radius: 8px; border: none; background: #2a2a4e; color: #888; cursor: pointer; font-size: 16px; transition: all 0.2s; }
         .header-btn:hover { background: #00d9ff; color: white; }
@@ -257,9 +257,9 @@ def get_html_content():
         .typing-dot:nth-child(2) { animation-delay: 0.2s; }
         .typing-dot:nth-child(3) { animation-delay: 0.4s; }
         @keyframes typing-bounce { 0%, 80%, 100% { transform: translateY(0); opacity: 0.3; } 40% { transform: translateY(-6px); opacity: 1; } }
-        .refresh-btn { background: #2a2a4e; color: #00d9ff; border: none; padding: 8px 16px; border-radius: 8px; cursor: pointer; }
+        .refresh-btn { background: #2a2a4e; color: #00d9ff; border: none; padding: 8px 16px; border-radius: 8px; cursor: pointer; font-size: 13px; }
         .refresh-btn:hover { background: #00d9ff; color: #0f0f1a; }
-        .filter-bar { display: flex; gap: 10px; align-items: center; margin-left: 15px; }
+        .filter-bar { display: inline-flex; align-items: center; }
         .filter-select { background: #2a2a4e; color: #e8e8e8; border: 1px solid #3a3a5e; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 13px; }
         .filter-select:hover { border-color: #00d9ff; }
         .filter-select:focus { outline: none; border-color: #00d9ff; }
