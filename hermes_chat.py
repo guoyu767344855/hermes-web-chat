@@ -238,6 +238,11 @@ def get_html_content():
         .typing-dot:nth-child(3) { animation-delay: 0.4s; }
         @keyframes typing-bounce { 0%, 80%, 100% { transform: translateY(0); opacity: 0.3; } 40% { transform: translateY(-6px); opacity: 1; } }
         .refresh-btn { background: #2a2a4e; color: #00d9ff; border: none; padding: 8px 16px; border-radius: 8px; cursor: pointer; }
+        .refresh-btn:hover { background: #00d9ff; color: #0f0f1a; }
+        .filter-bar { display: flex; gap: 10px; align-items: center; margin-left: 15px; }
+        .filter-select { background: #2a2a4e; color: #e8e8e8; border: 1px solid #3a3a5e; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+        .filter-select:hover { border-color: #00d9ff; }
+        .filter-select:focus { outline: none; border-color: #00d9ff; }
         .clear-btn { width: calc(100% - 20px); margin: 10px; padding: 10px; background: #2a2a4e; color: #ff6b6b; border: none; border-radius: 8px; cursor: pointer; }
         ::-webkit-scrollbar { width: 8px; }
         ::-webkit-scrollbar-track { background: #1a1a2e; }
@@ -286,9 +291,41 @@ def get_html_content():
                 </div>
             </div>
         </div>
-        <div id="page-memory" class="page"><div class="page-header"><h2>🧠 记忆管理 <button class="refresh-btn" onclick="loadMemory()">刷新</button></h2></div><div class="chat-messages" id="memory-content"><div class="loading"><div class="loading-spinner"></div>加载中...</div></div></div>
+        <div id="page-memory" class="page">
+            <div class="page-header">
+                <h2>
+                    🧠 记忆管理 
+                    <button class="refresh-btn" onclick="loadMemory()">刷新</button>
+                    <div class="filter-bar">
+                        <select class="filter-select" id="memoryDateFilter" onchange="filterMemory()">
+                            <option value="all">全部时间</option>
+                            <option value="7">最近 7 天</option>
+                            <option value="30">最近 30 天</option>
+                            <option value="90">最近 90 天</option>
+                        </select>
+                    </div>
+                </h2>
+            </div>
+            <div class="chat-messages" id="memory-content"><div class="loading"><div class="loading-spinner"></div>加载中...</div></div>
+        </div>
         <div id="page-skills" class="page"><div class="page-header"><h2>📚 技能列表 <button class="refresh-btn" onclick="loadSkills()">刷新</button></h2></div><div class="chat-messages" id="skills-content"><div class="loading"><div class="loading-spinner"></div>加载中...</div></div></div>
-        <div id="page-sessions" class="page"><div class="page-header"><h2>📋 会话历史 <button class="refresh-btn" onclick="loadSessions()">刷新</button></h2></div><div class="chat-messages" id="sessions-content"><div class="loading"><div class="loading-spinner"></div>加载中...</div></div></div>
+        <div id="page-sessions" class="page">
+            <div class="page-header">
+                <h2>
+                    📋 会话历史 
+                    <button class="refresh-btn" onclick="loadSessions()">刷新</button>
+                    <div class="filter-bar">
+                        <select class="filter-select" id="sessionDateFilter" onchange="filterSessions()">
+                            <option value="all">全部时间</option>
+                            <option value="7">最近 7 天</option>
+                            <option value="30">最近 30 天</option>
+                            <option value="90">最近 90 天</option>
+                        </select>
+                    </div>
+                </h2>
+            </div>
+            <div class="chat-messages" id="sessions-content"><div class="loading"><div class="loading-spinner"></div>加载中...</div></div>
+        </div>
         <div id="page-cron" class="page"><div class="page-header"><h2>⏰ 定时任务 <button class="refresh-btn" onclick="loadCron()">刷新</button></h2></div><div class="chat-messages" id="cron-content"><div class="loading"><div class="loading-spinner"></div>加载中...</div></div></div>
         <div id="page-projects" class="page"><div class="page-header"><h2>📊 项目跟踪 <button class="refresh-btn" onclick="loadProjects()">刷新</button></h2></div><div class="chat-messages" id="projects-content"><div class="loading"><div class="loading-spinner"></div>加载中...</div></div></div>
         <div id="page-costs" class="page"><div class="page-header"><h2>💰 费用统计 <button class="refresh-btn" onclick="loadCosts()">刷新</button></h2></div><div class="chat-messages" id="costs-content"><div class="loading"><div class="loading-spinner"></div>加载中...</div></div></div>
@@ -529,14 +566,53 @@ function showLoading(){
 function removeLoading(){var div=document.getElementById('loadingMsg');if(div)div.remove();}
 function clearChatHistory(){if(confirm('确定清空当前对话？')){var sessionKey='hermes_chat_'+CURRENT_SESSION;localStorage.removeItem(sessionKey);chatMessages.innerHTML='';addMessage('对话已清空',false,null,false);}}
 
-function loadMemory(){renderList.currentPage='memory';fetch('/api/memory').then(function(r){return r.json();}).then(renderList);}
+// 存储原始数据用于筛选
+var allSessionsData=[];
+var allMemoryData=[];
+
+function loadMemory(){
+    renderList.currentPage='memory';
+    fetch('/api/memory').then(function(r){return r.json();}).then(function(data){
+        allMemoryData=data;
+        renderList(data);
+    });
+}
+function loadSessions(){
+    renderList.currentPage='sessions';
+    fetch('/api/sessions').then(function(r){return r.json();}).then(function(data){
+        allSessionsData=data;
+        renderList(data);
+    });
+}
+function filterSessions(){
+    var days=document.getElementById('sessionDateFilter').value;
+    if(days==='all'){renderList(allSessionsData);return;}
+    var cutoff=new Date();
+    cutoff.setDate(cutoff.getDate()-parseInt(days));
+    var filtered={sessions:allSessionsData.sessions.filter(function(s){
+        var d=new Date(s.created||'');
+        return d>=cutoff;
+    })};
+    renderList(filtered);
+}
+function filterMemory(){
+    var days=document.getElementById('memoryDateFilter').value;
+    if(days==='all'){renderList(allMemoryData);return;}
+    var cutoff=new Date();
+    cutoff.setDate(cutoff.getDate()-parseInt(days));
+    var filtered={daily:allMemoryData.daily.filter(function(item){
+        var match=item.match(/^> (\\d{4}-\\d{2}-\\d{2})/);
+        if(!match)return false;
+        var d=new Date(match[1]);
+        return d>=cutoff;
+    }),long_term:allMemoryData.long_term,file_path:allMemoryData.file_path};
+    renderList(filtered);
+}
 function loadSkills(){renderList.currentPage='skills';fetch('/api/skills').then(function(r){return r.json();}).then(renderList);}
-function loadSessions(){renderList.currentPage='sessions';fetch('/api/sessions').then(function(r){return r.json();}).then(renderList);}
 function loadCron(){renderRaw.currentPage='cron';fetch('/api/cron').then(function(r){return r.json();}).then(renderRaw);}
 function loadProjects(){renderList.currentPage='projects';fetch('/api/projects').then(function(r){return r.json();}).then(renderList);}
 function loadCosts(){renderStats.currentPage='costs';fetch('/api/costs').then(function(r){return r.json();}).then(renderStats);}
 function loadPatterns(){renderStats.currentPage='patterns';fetch('/api/patterns').then(function(r){return r.json();}).then(renderStats);}
-
 function renderList(data){
     var html='<div class="card"><ul class="data-list">';
     if(data.skills){
@@ -569,7 +645,20 @@ function renderList(data){
             html+='</li>';
         }
     }
-    else if(data.projects||data.daily){var items=data.projects||data.daily;for(var i=0;i<items.length;i++)html+='<li>'+items[i]+'</li>';}
+    else if(data.projects||data.daily){
+        var items=data.projects||data.daily;
+        if(items && items.length>0){
+            for(var i=0;i<items.length;i++)html+='<li>'+items[i]+'</li>';
+        }else{
+            html+='<li style="color:#666;text-align:center;padding:20px;">暂无数据</li>';
+        }
+    }
+    else if(data.skills!==undefined && data.skills.length===0){
+        html+='<li style="color:#666;text-align:center;padding:20px;">暂无技能数据</li>';
+    }
+    else if(data.sessions!==undefined && data.sessions.length===0){
+        html+='<li style="color:#666;text-align:center;padding:20px;">暂无会话数据</li>';
+    }
     else{html+='<li>暂无数据</li>';}
     html+='</ul></div>';
     var page=renderList.currentPage||'memory';
