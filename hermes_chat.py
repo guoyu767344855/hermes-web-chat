@@ -1,18 +1,44 @@
 """
-Hermes Agent Web Chat - 最终修复版
+Hermes Agent Web Chat - 跨平台版本 (Windows/Mac/Linux)
 """
 from fastapi import FastAPI, Form, UploadFile, File
 from fastapi.responses import HTMLResponse, JSONResponse
 from pathlib import Path
-import subprocess, tempfile, os, json, glob, sys, shutil
+import subprocess, tempfile, os, json, glob, sys, shutil, platform
 from typing import Optional
 import uvicorn
 from datetime import datetime
 
 app = FastAPI()
-HERMES_HOME = Path.home() / ".Hermes"
+
+# 跨平台 HERMES_HOME 路径
+if platform.system() == "Windows":
+    # Windows: 使用用户目录
+    HERMES_HOME = Path(os.environ.get("HERMES_HOME", Path.home() / ".Hermes"))
+else:
+    # Mac/Linux
+    HERMES_HOME = Path(os.environ.get("HERMES_HOME", Path.home() / ".Hermes"))
+
 UPLOAD_DIR = HERMES_HOME / "web-chat" / "uploads"
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
+def get_hermes_cmd():
+    """跨平台查找 hermes 命令"""
+    hermes_cmd = shutil.which("hermes")
+    if not hermes_cmd:
+        # Windows 额外检查
+        if platform.system() == "Windows":
+            # 检查常见安装位置
+            possible_paths = [
+                Path.home() / ".local" / "bin" / "hermes.exe",
+                Path.home() / ".local" / "bin" / "hermes",
+                Path("C:\\Program Files\\Hermes\\hermes.exe"),
+                Path("C:\\Users\\Public\\Hermes\\hermes.exe"),
+            ]
+            for p in possible_paths:
+                if p.exists():
+                    return str(p)
+    return hermes_cmd
 
 def get_memory_data():
     possible_paths = [HERMES_HOME / "memories" / "MEMORY.md", HERMES_HOME / "MEMORY.md", Path.home() / ".hermes" / "memories" / "MEMORY.md"]
@@ -35,7 +61,9 @@ def get_memory_data():
 
 def get_skills_data():
     try:
-        result = subprocess.run(["hermes", "skills", "list"], capture_output=True, text=True, timeout=30, env={**os.environ, "HERMES_HOME": str(HERMES_HOME)})
+        hermes_cmd = get_hermes_cmd()
+        if not hermes_cmd: return {"skills": [], "count": 0, "error": "hermes command not found"}
+        result = subprocess.run([hermes_cmd, "skills", "list"], capture_output=True, text=True, timeout=30, env={**os.environ, "HERMES_HOME": str(HERMES_HOME)})
         skills = []
         for line in result.stdout.strip().split('\n'):
             # 只处理表格数据行（以│开头和结尾）
@@ -97,7 +125,9 @@ def get_session_detail(session_id):
 
 def get_cron_data():
     try:
-        result = subprocess.run(["hermes", "cronjob", "list"], capture_output=True, text=True, timeout=30, env={**os.environ, "HERMES_HOME": str(HERMES_HOME)})
+        hermes_cmd = get_hermes_cmd()
+        if not hermes_cmd: return {"raw": "hermes command not found"}
+        result = subprocess.run([hermes_cmd, "cronjob", "list"], capture_output=True, text=True, timeout=30, env={**os.environ, "HERMES_HOME": str(HERMES_HOME)})
         return {"raw": result.stdout}
     except: return {"raw": ""}
 
@@ -150,8 +180,8 @@ def get_patterns_data():
 
 def call_hermes(message: str, image_path: Optional[str] = None) -> str:
     try:
-        # 使用 shutil.which() 查找 hermes 命令，支持不同系统配置
-        hermes_cmd = shutil.which("hermes")
+        # 跨平台查找 hermes 命令
+        hermes_cmd = get_hermes_cmd()
         if not hermes_cmd:
             return "错误：找不到 hermes 命令，请确认已正确安装"
         cmd = [hermes_cmd, "chat", "-q", message or "你好", "-Q", "--source", "web"]
