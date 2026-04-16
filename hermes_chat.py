@@ -677,7 +677,6 @@ function sendMessage(){
     var imageToSend=currentImage;
     removeImage();
     removeFile();
-    showLoading();
     var formData=new FormData();
     formData.append('message',message||'请分析');
     if(imageToSend){
