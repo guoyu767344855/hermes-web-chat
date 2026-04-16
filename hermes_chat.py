@@ -328,7 +328,7 @@ def get_html_content():
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Hermes Agent</title>
-    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js?v=1"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: linear-gradient(135deg, #0f0f1a 0%, #1a1a2e 50%, #16213e 100%); min-height: 100vh; display: flex; color: #e8e8e8; }
@@ -599,10 +599,13 @@ function loadChatHistory(){
                 var msg=history[i];
                 var div=document.createElement('div');
                 div.className='message '+(msg.isUser?'user':'assistant');
-                var html='<div class="message-avatar">'+(msg.isUser?'👤':'🤖')+'</div><div class="message-content"><div class="message-text">'+msg.content+'</div>';
+                // 用户消息保留换行，助手消息用 marked 渲染
+                var renderedContent=msg.isUser?msg.content.split('\\n').join('<br>'):marked.parse(msg.content);
+                var html='<div class="message-avatar">'+(msg.isUser?'👤':'🤖')+'</div><div class="message-content"><div class="message-text">'+renderedContent+'</div>';
                 if(msg.imageData)html+='<img class="message-image" src="'+msg.imageData+'">';
                 html+='</div>';
                 div.innerHTML=html;
+                if(msg.isUser){div.style.cursor='pointer';div.title='右键点击重新编辑';div.oncontextmenu=function(e){e.preventDefault();editMessage(this);};}
                 chatMessages.appendChild(div);
             }
             chatMessages.scrollTop=chatMessages.scrollHeight;
@@ -635,7 +638,9 @@ function addMessage(content,isUser,imageData,save){
     if(save===undefined)save=true;
     var div=document.createElement('div');
     div.className='message '+(isUser?'user':'assistant');
-    var html='<div class="message-avatar">'+(isUser?'👤':'🤖')+'</div><div class="message-content"><div class="message-text">'+content+'</div>';
+    // 使用 marked 渲染 Markdown（包括换行）
+    var renderedContent=isUser?content:marked.parse(content);
+    var html='<div class="message-avatar">'+(isUser?'👤':'🤖')+'</div><div class="message-content"><div class="message-text">'+renderedContent+'</div>';
     if(imageData)html+='<img class="message-image" src="'+imageData+'">';
     html+='</div>';
     div.innerHTML=html;
@@ -665,18 +670,10 @@ function typeMessage(content){
     div.innerHTML=html;
     chatMessages.appendChild(div);
     var textDiv=div.querySelector('.message-text');
-    var i=0;
-    function type(){
-        if(i<content.length){
-            textDiv.textContent+=content.charAt(i);
-            i++;
-            chatMessages.scrollTop=chatMessages.scrollHeight;
-            setTimeout(type,15);
-        }else{
-            saveChatHistory();
-        }
-    }
-    type();
+    // 使用 marked 渲染 Markdown 内容（保留换行和格式）
+    textDiv.innerHTML=marked.parse(content);
+    chatMessages.scrollTop=chatMessages.scrollHeight;
+    saveChatHistory();
 }
 
 function sendMessage(){
@@ -763,7 +760,8 @@ function sendStreamRequest(formData,file){
         position=xhr.responseText.length;
         buffer+=text;
         
-        var lines=buffer.split('\\n');
+        // 按 SSE 协议格式解析：每行以 data: 开头
+        var lines=buffer.split('\n');
         buffer=lines.pop()||'';
         
         for(var i=0;i<lines.length;i++){
@@ -776,7 +774,10 @@ function sendStreamRequest(formData,file){
                     saveChatHistory();
                     return;
                 }
-                // 直接追加完整数据块，避免逐字破坏中文
+                // 保留换行符，让 marked 正确解析 Markdown
+                if(textDiv.textContent.length>0 && !textDiv.textContent.endsWith('\n')){
+                    textDiv.textContent+='\n';
+                }
                 textDiv.textContent+=data;
                 // 实时渲染 Markdown
                 textDiv.innerHTML=marked.parse(textDiv.textContent);
@@ -787,7 +788,7 @@ function sendStreamRequest(formData,file){
     
     xhr.onload=function(){
         if(xhr.status!==200){
-            if(textDiv) textDiv.textContent+='\\n[发送失败]';
+            if(textDiv) textDiv.textContent+='\n[发送失败]';
         }
         sendBtn.disabled=false;
         messageInput.focus();
@@ -795,7 +796,7 @@ function sendStreamRequest(formData,file){
     };
     
     xhr.onerror=function(){
-        if(textDiv) textDiv.textContent+='\\n[网络错误]';
+        if(textDiv) textDiv.textContent+='\n[网络错误]';
         sendBtn.disabled=false;
         messageInput.focus();
     };
@@ -999,7 +1000,9 @@ function renderChatHistory(history){
         var msg=history[i];
         var div=document.createElement('div');
         div.className='message '+(msg.isUser?'user':'assistant');
-        var html='<div class="message-avatar">'+(msg.isUser?'👤':'🤖')+'</div><div class="message-content"><div class="message-text">'+(msg.isUser?msg.content:marked.parse(msg.content))+'</div>';
+        // 用户消息保留换行，助手消息用 marked 渲染
+        var renderedContent=msg.isUser?msg.content.split('\\n').join('<br>'):marked.parse(msg.content);
+        var html='<div class="message-avatar">'+(msg.isUser?'👤':'🤖')+'</div><div class="message-content"><div class="message-text">'+renderedContent+'</div>';
         if(msg.imageData)html+='<img class="message-image" src="'+msg.imageData+'">';
         html+='</div>';
         div.innerHTML=html;
