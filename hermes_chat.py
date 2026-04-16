@@ -4,7 +4,7 @@ Hermes Agent Web Chat - 最终修复版
 from fastapi import FastAPI, Form, UploadFile, File
 from fastapi.responses import HTMLResponse, JSONResponse
 from pathlib import Path
-import subprocess, tempfile, os, json, glob, sys
+import subprocess, tempfile, os, json, glob, sys, shutil
 from typing import Optional
 import uvicorn
 from datetime import datetime
@@ -150,8 +150,10 @@ def get_patterns_data():
 
 def call_hermes(message: str, image_path: Optional[str] = None) -> str:
     try:
-        # 使用完整路径
-        hermes_cmd = "/Users/guomin/.local/bin/hermes"
+        # 使用 shutil.which() 查找 hermes 命令，支持不同系统配置
+        hermes_cmd = shutil.which("hermes")
+        if not hermes_cmd:
+            return "错误：找不到 hermes 命令，请确认已正确安装"
         cmd = [hermes_cmd, "chat", "-q", message or "你好", "-Q", "--source", "web"]
         if image_path: cmd.extend(["--image", image_path])
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=300, env={**os.environ, "HERMES_HOME": str(HERMES_HOME)})
