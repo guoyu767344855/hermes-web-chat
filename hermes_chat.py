@@ -565,14 +565,34 @@ function sendMessage(){
     var formData=new FormData();
     formData.append('message',message||'请分析');
     if(imageToSend){
-        fetch(imageToSend).then(function(r){return r.blob();}).then(function(blob){
+        // 将 base64 或 URL 转换为 blob
+        dataURLtoBlob(imageToSend).then(function(blob){
             formData.append('image',blob,'image.png');
             sendRequest(formData,fileToSend);
         }).catch(function(err){
-            console.error('Load image error:',err);
+            console.error('Convert image error:',err);
             sendRequest(formData,fileToSend);
         });
     }else{sendRequest(formData,fileToSend);}
+}
+
+// 将 dataURL 或 URL 转换为 blob
+function dataURLtoBlob(dataURL){
+    return new Promise(function(resolve,reject){
+        if(dataURL.startsWith('data:')){
+            // base64 data URL
+            var parts=dataURL.split(',');
+            var mime=parts[0].match(/:(.*?);/)[1];
+            var bstr=atob(parts[1]);
+            var n=bstr.length;
+            var u8arr=new Uint8Array(n);
+            while(n--){u8arr[n]=bstr.charCodeAt(n);}
+            resolve(new Blob([u8arr],{type:mime}));
+        }else{
+            // HTTP URL
+            fetch(dataURL).then(function(r){return r.blob();}).then(resolve).catch(reject);
+        }
+    });
 }
 
 function sendRequest(formData,file){
