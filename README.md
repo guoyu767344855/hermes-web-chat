@@ -146,6 +146,21 @@ python3 hermes_chat.py 9000
 
 ## 📝 更新日志
 
+### v1.7.0 (2026-04-16)
+
+**🐛 Bug 修复**
+- 修复粘贴图片（base64 dataURL）无法上传的问题
+- `fetch()` 无法直接处理 `data:` 开头的 base64 URL
+
+**✨ 新功能**
+- 添加 `dataURLtoBlob()` 函数
+- 支持 base64 dataURL 和 HTTP URL 两种格式
+
+**🔧 技术实现**
+- 检测 dataURL 是否以 `'data:'` 开头
+- base64 格式：使用 `atob()` 解码，创建 `Uint8Array`
+- HTTP URL：使用 `fetch()` 获取 blob
+
 ### v1.6.0 (2026-04-16)
 
 **🐛 Bug 修复**
