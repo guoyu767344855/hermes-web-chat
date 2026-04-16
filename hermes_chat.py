@@ -77,6 +77,24 @@ def get_sessions_data():
         except: continue
     return {"sessions": sessions, "count": len(sessions)}
 
+def get_session_detail(session_id):
+    sessions_dir = HERMES_HOME / "sessions"
+    fp = sessions_dir / f"{session_id}.json"
+    if not fp.exists(): return {"error": "Session not found", "messages": []}
+    try:
+        with open(fp, 'r', encoding='utf-8') as f: data = json.load(f)
+        msgs = data.get("messages", [])
+        # 转换为前端格式
+        messages = []
+        for m in msgs:
+            role = m.get("role", "assistant")
+            content = m.get("content", "")
+            is_user = (role == "user")
+            messages.append({"content": content, "isUser": is_user, "imageData": None})
+        return {"messages": messages, "title": data.get("title", ""), "created": data.get("created_at", "")}
+    except Exception as e:
+        return {"error": str(e), "messages": []}
+
 def get_cron_data():
     try:
         result = subprocess.run(["hermes", "cronjob", "list"], capture_output=True, text=True, timeout=30, env={**os.environ, "HERMES_HOME": str(HERMES_HOME)})
@@ -165,6 +183,8 @@ async def api_memory(): return JSONResponse(content=get_memory_data())
 async def api_skills(): return JSONResponse(content=get_skills_data())
 @app.get("/api/sessions")
 async def api_sessions(): return JSONResponse(content=get_sessions_data())
+@app.get("/api/session_detail")
+async def api_session_detail(session_id: str): return JSONResponse(content=get_session_detail(session_id))
 @app.get("/api/cron")
 async def api_cron(): return JSONResponse(content=get_cron_data())
 @app.get("/api/projects")
@@ -680,7 +700,7 @@ function renderList(data){
 function openSession(sessionId,sessionTitle){
     CURRENT_SESSION=sessionId;
     updateSessionTitle();
-    loadChatHistory();
+    loadSessionDetail();
     // 切换到聊天页面
     var allItems=document.querySelectorAll('.menu-item');
     for(var j=0;j<allItems.length;j++)allItems[j].classList.remove('active');
@@ -688,6 +708,51 @@ function openSession(sessionId,sessionTitle){
     var allPages=document.querySelectorAll('.page');
     for(var j=0;j<allPages.length;j++)allPages[j].classList.remove('active');
     document.getElementById('page-chat').classList.add('active');
+}
+
+function loadSessionDetail(){
+    var sessionKey='hermes_chat_'+CURRENT_SESSION;
+    // 先尝试从 localStorage 加载
+    var saved=localStorage.getItem(sessionKey);
+    if(saved){
+        var history=JSON.parse(saved);
+        renderChatHistory(history);
+        return;
+    }
+    // 从服务器加载历史会话
+    fetch('/api/session_detail?session_id='+encodeURIComponent(CURRENT_SESSION))
+        .then(function(r){return r.json();})
+        .then(function(data){
+            if(data.messages && data.messages.length>0){
+                renderChatHistory(data.messages);
+                // 保存到 localStorage
+                localStorage.setItem(sessionKey,JSON.stringify(data.messages));
+            }else{
+                chatMessages.innerHTML='';
+                addMessage('👋 你好！我是 Hermes Agent，有什么可以帮你的吗？',false,null,false);
+            }
+        })
+        .catch(function(e){
+            console.error('Load session detail error:',e);
+            chatMessages.innerHTML='';
+            addMessage('👋 你好！我是 Hermes Agent，有什么可以帮你的吗？',false,null,false);
+        });
+}
+
+function renderChatHistory(history){
+    chatMessages.innerHTML='';
+    for(var i=0;i<history.length;i++){
+        var msg=history[i];
+        var div=document.createElement('div');
+        div.className='message '+(msg.isUser?'user':'assistant');
+        var html='<div class="message-avatar">'+(msg.isUser?'👤':'🤖')+'</div><div class="message-content"><div class="message-text">'+msg.content+'</div>';
+        if(msg.imageData)html+='<img class="message-image" src="'+msg.imageData+'">';
+        html+='</div>';
+        div.innerHTML=html;
+        if(msg.isUser){div.style.cursor='pointer';div.title='右键点击重新编辑';div.oncontextmenu=function(e){e.preventDefault();editMessage(this);};}
+        chatMessages.appendChild(div);
+    }
+    chatMessages.scrollTop=chatMessages.scrollHeight;
 }
 
 function renderRaw(data){
