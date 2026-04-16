@@ -766,7 +766,8 @@ function sendStreamRequest(formData,file){
         buffer+=text;
         
         // 按 SSE 协议格式解析：每行以 data: 开头
-        var lines=buffer.split('\n');
+        var NL=String.fromCharCode(10);
+        var lines=buffer.split(NL);
         buffer=lines.pop()||'';
         
         for(var i=0;i<lines.length;i++){
@@ -780,8 +781,8 @@ function sendStreamRequest(formData,file){
                     return;
                 }
                 // 保留换行符，让 marked 正确解析 Markdown
-                if(textDiv.textContent.length>0 && !textDiv.textContent.endsWith('\n')){
-                    textDiv.textContent+='\n';
+                if(textDiv.textContent.length>0 && !textDiv.textContent.endsWith(NL)){
+                    textDiv.textContent+=NL;
                 }
                 textDiv.textContent+=data;
                 // 实时渲染 Markdown
@@ -793,7 +794,7 @@ function sendStreamRequest(formData,file){
     
     xhr.onload=function(){
         if(xhr.status!==200){
-            if(textDiv) textDiv.textContent+='\n[发送失败]';
+            if(textDiv) textDiv.textContent+=NL+'[发送失败]';
         }
         sendBtn.disabled=false;
         messageInput.focus();
@@ -801,7 +802,7 @@ function sendStreamRequest(formData,file){
     };
     
     xhr.onerror=function(){
-        if(textDiv) textDiv.textContent+='\n[网络错误]';
+        if(textDiv) textDiv.textContent+=NL+'[网络错误]';
         sendBtn.disabled=false;
         messageInput.focus();
     };
@@ -919,7 +920,10 @@ function renderList(data){
     else if(data.sessions){
         for(var i=0;i<data.sessions.length;i++){
             var s=data.sessions[i];
-            html+='<li class="session-item" data-session-id="'+s.id+'" data-session-title="'+(s.title||'未命名').replace(/"/g,'&quot;')+'" style="cursor:pointer;">';
+            var SQ=String.fromCharCode(39);
+            var DQ=String.fromCharCode(34);
+            var safeTitle=String(s.title||'未命名').replace(new RegExp(SQ,'g'),'\\x27').replace(new RegExp(DQ,'g'),'\\x22');
+            html+='<li class="session-item" data-session-id="'+s.id+'" data-session-title="'+safeTitle+'" style="cursor:pointer;">';
             html+='<strong>'+(s.title||'未命名')+'</strong><br>';
             html+='<small>'+(s.created||'')+' | '+s.messages+'条</small>';
             html+='</li>';
@@ -1001,12 +1005,13 @@ function loadSessionDetail(){
 
 function renderChatHistory(history){
     chatMessages.innerHTML='';
+    var NL=String.fromCharCode(10);
     for(var i=0;i<history.length;i++){
         var msg=history[i];
         var div=document.createElement('div');
         div.className='message '+(msg.isUser?'user':'assistant');
         // 用户消息保留换行，助手消息用 marked 渲染
-        var renderedContent=msg.isUser?msg.content.split('\\n').join('<br>'):marked.parse(msg.content);
+        var renderedContent=msg.isUser?msg.content.split(NL).join('<br>'):marked.parse(msg.content);
         var html='<div class="message-avatar">'+(msg.isUser?'👤':'🤖')+'</div><div class="message-content"><div class="message-text">'+renderedContent+'</div>';
         if(msg.imageData)html+='<img class="message-image" src="'+msg.imageData+'">';
         html+='</div>';
