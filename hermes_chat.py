@@ -729,13 +729,10 @@ function sendStreamRequest(formData,file){
     removeLoading();
     var assistantDiv=createAssistantMessage();
     var textDiv=assistantDiv.querySelector('.message-text');
-    var fullText='';
     var buffer='';
-    var typeIndex=0;
     
     var xhr=new XMLHttpRequest();
     xhr.open('POST','/api/chat_stream',true);
-    xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
     
     var position=0;
     xhr.onprogress=function(){
@@ -743,7 +740,7 @@ function sendStreamRequest(formData,file){
         position=xhr.responseText.length;
         buffer+=text;
         
-        var lines=buffer.split('\\n');
+        var lines=buffer.split('\n');
         buffer=lines.pop()||'';
         
         for(var i=0;i<lines.length;i++){
@@ -756,7 +753,6 @@ function sendStreamRequest(formData,file){
                     saveChatHistory();
                     return;
                 }
-                // 将新内容添加到队列，使用打字机效果
                 typeText(data, textDiv);
             }
         }
