@@ -731,6 +731,7 @@ function sendStreamRequest(formData,file){
     var textDiv=assistantDiv.querySelector('.message-text');
     var fullText='';
     var buffer='';
+    var typeIndex=0;
     
     var xhr=new XMLHttpRequest();
     xhr.open('POST','/api/chat_stream',true);
@@ -742,7 +743,6 @@ function sendStreamRequest(formData,file){
         position=xhr.responseText.length;
         buffer+=text;
         
-        // 处理 SSE 格式的数据
         var lines=buffer.split('\\n');
         buffer=lines.pop()||'';
         
@@ -756,17 +756,15 @@ function sendStreamRequest(formData,file){
                     saveChatHistory();
                     return;
                 }
-                fullText+=data+'\\n';
+                // 将新内容添加到队列，使用打字机效果
+                typeText(data, textDiv);
             }
         }
-        
-        textDiv.textContent=fullText;
-        chatMessages.scrollTop=chatMessages.scrollHeight;
     };
     
     xhr.onload=function(){
         if(xhr.status!==200){
-            textDiv.textContent+='\\n[发送失败]';
+            textDiv.textContent+='\n[发送失败]';
         }
         sendBtn.disabled=false;
         messageInput.focus();
@@ -774,12 +772,27 @@ function sendStreamRequest(formData,file){
     };
     
     xhr.onerror=function(){
-        textDiv.textContent+='\\n[网络错误]';
+        textDiv.textContent+='\n[网络错误]';
         sendBtn.disabled=false;
         messageInput.focus();
     };
     
     xhr.send(formData);
+}
+
+// 打字机效果显示文本
+function typeText(text, textDiv){
+    var chars=text.split('');
+    var index=0;
+    function type(){
+        if(index<chars.length){
+            textDiv.textContent+=chars[index];
+            index++;
+            chatMessages.scrollTop=chatMessages.scrollHeight;
+            setTimeout(type, 10+Math.random()*20); // 随机打字速度
+        }
+    }
+    type();
 }
 
 function createAssistantMessage(){
