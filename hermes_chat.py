@@ -1,5 +1,5 @@
 """
-Hermes Agent Web Chat - 多会话版本
+Hermes Agent Web Chat - 最终修复版
 """
 from fastapi import FastAPI, Form, UploadFile, File
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -38,10 +38,13 @@ def get_skills_data():
         result = subprocess.run(["hermes", "skills", "list"], capture_output=True, text=True, timeout=30, env={**os.environ, "HERMES_HOME": str(HERMES_HOME)})
         skills = []
         for line in result.stdout.strip().split('\n'):
-            if line.strip() and '│' in line and 'Name' not in line and '━━' not in line:
-                parts = [p.strip() for p in line.split('│') if p.strip()]
-                if len(parts) >= 2 and parts[0].strip() and not parts[0].startswith('┡'):
-                    skills.append({"name": parts[0], "category": parts[1] if len(parts) > 1 else "", "description": ""})
+            # 只处理表格数据行（以│开头和结尾）
+            if line.strip().startswith('│') and line.strip().endswith('│'):
+                # 按│分割，去掉首尾空元素
+                parts = [p.strip() for p in line.split('│')[1:-1]]
+                # 表格格式：Name | Category | Source | Trust (4 列)
+                if len(parts) >= 4 and parts[0] and not parts[0].startswith('━') and not parts[0].startswith('┃') and not parts[0].startswith('┡'):
+                    skills.append({"name": parts[0], "category": parts[1] if parts[1] else "builtin", "source": parts[2], "trust": parts[3]})
         return {"skills": skills, "count": len(skills)}
     except Exception as e:
         print(f"Skills error: {e}")
@@ -158,22 +161,16 @@ async def chat(message: str = Form(...), image: UploadFile = File(None), file: U
 
 @app.get("/api/memory")
 async def api_memory(): return JSONResponse(content=get_memory_data())
-
 @app.get("/api/skills")
 async def api_skills(): return JSONResponse(content=get_skills_data())
-
 @app.get("/api/sessions")
 async def api_sessions(): return JSONResponse(content=get_sessions_data())
-
 @app.get("/api/cron")
 async def api_cron(): return JSONResponse(content=get_cron_data())
-
 @app.get("/api/projects")
 async def api_projects(): return JSONResponse(content=get_projects_data())
-
 @app.get("/api/costs")
 async def api_costs(): return JSONResponse(content=get_costs_data())
-
 @app.get("/api/patterns")
 async def api_patterns(): return JSONResponse(content=get_patterns_data())
 
@@ -188,43 +185,37 @@ def get_html_content():
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: linear-gradient(135deg, #0f0f1a 0%, #1a1a2e 50%, #16213e 100%); min-height: 100vh; display: flex; color: #e8e8e8; }
         .sidebar { width: 260px; background: linear-gradient(180deg, #0a0a1a 0%, #1a1a2e 100%); border-right: 1px solid #1f3a5f; flex-shrink: 0; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
-        .logo { text-align: center; padding: 20px; border-bottom: 1px solid #1f3a5f; margin-bottom: 10px; }
+        .logo { text-align: center; padding: 20px; border-bottom: 1px solid #1f3a5f; position: relative; }
         .logo h1 { font-size: 24px; background: linear-gradient(135deg, #00d9ff 0%, #00ff88 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
         .logo p { color: #666; font-size: 12px; margin-top: 5px; }
-        .session-list { padding: 0 10px; flex: 0 0 auto; max-height: 25vh; overflow-y: auto; margin-bottom: 10px; border-bottom: 1px solid #1f3a5f; padding-bottom: 10px; }
-        .session-item { padding: 10px; margin: 4px 0; border-radius: 8px; cursor: pointer; color: #888; transition: all 0.2s; }
-        .session-item:hover { background: rgba(0, 217, 255, 0.1); }
-        .session-item.active { background: rgba(0, 217, 255, 0.2); border-left: 3px solid #00d9ff; }
-        .session-title { font-size: 13px; color: #e8e8e8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .session-meta { font-size: 11px; color: #666; margin-top: 4px; }
-        .menu { list-style: none; padding: 0 10px; flex: 1; overflow-y: auto; }
-        .menu-item { padding: 12px 16px; margin: 4px 0; border-radius: 8px; cursor: pointer; transition: all 0.2s ease; color: #888; display: flex; align-items: center; gap: 12px; font-size: 14px; }
+        .page-header { padding: 20px 30px; border-bottom: 1px solid #1f3a5f; background: rgba(15, 15, 26, 0.8); display: flex; justify-content: space-between; align-items: center; }
+        .page-header h2 { font-size: 18px; color: #e8e8e8; margin: 0; }
+        .header-actions { display: flex; gap: 8px; }
+        .header-btn { width: 32px; height: 32px; border-radius: 8px; border: none; background: #2a2a4e; color: #888; cursor: pointer; font-size: 16px; transition: all 0.2s; }
+        .header-btn:hover { background: #00d9ff; color: white; }
+        .menu { list-style: none; padding: 10px; flex: 1; overflow-y: auto; }
+        .menu-item { padding: 12px 16px; margin: 4px 0; border-radius: 8px; cursor: pointer; transition: all 0.2s; color: #888; }
         .menu-item:hover { background: rgba(0, 217, 255, 0.1); color: #00d9ff; }
-        .menu-item.active { background: linear-gradient(135deg, #00d9ff 0%, #0099ff 100%); color: white; box-shadow: 0 4px 15px rgba(0, 217, 255, 0.3); }
+        .menu-item.active { background: linear-gradient(135deg, #00d9ff 0%, #0099ff 100%); color: white; }
         .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
         .page { display: none; height: 100vh; flex-direction: column; }
         .page.active { display: flex; }
         .page-header { padding: 20px 30px; border-bottom: 1px solid #1f3a5f; background: rgba(15, 15, 26, 0.8); }
-        .page-header h2 { font-size: 24px; color: #00d9ff; }
+        .page-header h2 { font-size: 18px; color: #e8e8e8; }
         .chat-messages { flex: 1; overflow-y: auto; padding: 30px; display: flex; flex-direction: column; gap: 20px; }
         .message { display: flex; gap: 15px; max-width: 80%; }
         .message.user { align-self: flex-end; flex-direction: row-reverse; }
-        .message-avatar { width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 20px; flex-shrink: 0; background: #00d9ff; }
+        .message-avatar { width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 20px; }
         .message-content { background: #1a1a2e; padding: 15px 20px; border-radius: 16px; border: 1px solid #2a2a4e; }
-        .message.user .message-content { background: linear-gradient(135deg, #1f3a5f 0%, #2a4a6f 100%); }
         .message-text { color: #e8e8e8; line-height: 1.6; font-size: 15px; white-space: pre-wrap; }
         .message-image { max-width: 300px; border-radius: 10px; margin-top: 10px; border: 2px solid #2a2a4e; }
         .input-container { padding: 20px 30px; background: rgba(15, 15, 26, 0.95); border-top: 1px solid #1f3a5f; }
         .input-wrapper { display: flex; gap: 15px; align-items: flex-end; background: #1a1a2e; border: 2px solid #2a2a4e; border-radius: 24px; padding: 8px 8px 8px 20px; }
-        .input-wrapper:focus-within { border-color: #00d9ff; box-shadow: 0 0 20px rgba(0, 217, 255, 0.2); }
         #messageInput { flex: 1; background: transparent; border: none; outline: none; color: #e8e8e8; font-size: 15px; padding: 10px 0; resize: none; max-height: 150px; font-family: inherit; }
-        #messageInput::placeholder { color: #666; }
-        .input-actions { display: flex; gap: 8px; padding-right: 8px; }
-        .action-btn { width: 44px; height: 44px; border-radius: 50%; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 20px; background: #2a2a4e; color: #888; }
+        .input-actions { display: flex; gap: 8px; }
+        .action-btn { width: 44px; height: 44px; border-radius: 50%; border: none; cursor: pointer; background: #2a2a4e; color: #888; font-size: 20px; }
         .action-btn:hover { background: #3a3a5e; color: #00d9ff; }
         #sendBtn { background: linear-gradient(135deg, #00d9ff 0%, #0099ff 100%); color: white; }
-        #sendBtn:hover { transform: scale(1.05); }
-        #sendBtn:disabled { opacity: 0.5; cursor: not-allowed; }
         .preview-container, .file-preview-container { display: none; padding: 10px 30px; background: rgba(15, 15, 26, 0.95); border-top: 1px solid #1f3a5f; }
         .preview-container.show, .file-preview-container.show { display: block; }
         .preview-image { max-height: 150px; border-radius: 10px; border: 2px solid #00d9ff; }
@@ -240,10 +231,14 @@ def get_html_content():
         .loading { text-align: center; padding: 40px; color: #666; }
         .loading-spinner { width: 40px; height: 40px; border: 3px solid #2a2a4e; border-top-color: #00d9ff; border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 20px; }
         @keyframes spin { to { transform: rotate(360deg); } }
+        .typing-indicator { display: flex; gap: 4px; padding: 15px 20px; align-items: center; }
+        .typing-dot { width: 8px; height: 8px; border-radius: 50%; background: #00d9ff; animation: typing-bounce 1.4s infinite ease-in-out; }
+        .typing-dot:nth-child(1) { animation-delay: 0s; }
+        .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+        .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+        @keyframes typing-bounce { 0%, 80%, 100% { transform: translateY(0); opacity: 0.3; } 40% { transform: translateY(-6px); opacity: 1; } }
         .refresh-btn { background: #2a2a4e; color: #00d9ff; border: none; padding: 8px 16px; border-radius: 8px; cursor: pointer; }
-        .new-session-btn { width: 100%; padding: 10px; background: linear-gradient(135deg, #00d9ff, #0099ff); color: white; border: none; border-radius: 8px; cursor: pointer; margin: 0; }
-        .new-session-btn:hover { transform: scale(1.02); }
-        .clear-btn { width: 100%; padding: 10px; background: #2a2a4e; color: #ff6b6b; border: none; border-radius: 8px; cursor: pointer; margin-top: 10px; }
+        .clear-btn { width: calc(100% - 20px); margin: 10px; padding: 10px; background: #2a2a4e; color: #ff6b6b; border: none; border-radius: 8px; cursor: pointer; }
         ::-webkit-scrollbar { width: 8px; }
         ::-webkit-scrollbar-track { background: #1a1a2e; }
         ::-webkit-scrollbar-thumb { background: #2a2a4e; border-radius: 4px; }
@@ -251,24 +246,29 @@ def get_html_content():
 </head>
 <body>
     <div class="sidebar">
-        <div class="logo"><h1>Hermes Agent</h1><p>AI 智能助手</p></div>
-        <div style="padding:10px;"><button class="new-session-btn" onclick="createNewSession()">+ 新会话</button></div>
+        <div class="logo">
+            <h1>Hermes Agent</h1>
+            <p>AI 智能助手</p>
+        </div>
         <ul class="menu">
-            <li class="menu-item active" data-page="chat">聊天对话</li>
-            <li class="menu-item" data-page="memory">记忆管理</li>
-            <li class="menu-item" data-page="skills">技能列表</li>
-            <li class="menu-item" data-page="sessions">会话历史</li>
-            <li class="menu-item" data-page="cron">定时任务</li>
-            <li class="menu-item" data-page="projects">项目跟踪</li>
-            <li class="menu-item" data-page="costs">费用统计</li>
-            <li class="menu-item" data-page="patterns">使用模式</li>
+            <li class="menu-item active" data-page="chat">💬 聊天对话</li>
+            <li class="menu-item" data-page="memory">🧠 记忆管理</li>
+            <li class="menu-item" data-page="skills">📚 技能列表</li>
+            <li class="menu-item" data-page="sessions">📋 会话历史</li>
+            <li class="menu-item" data-page="cron">⏰ 定时任务</li>
+            <li class="menu-item" data-page="projects">📊 项目跟踪</li>
+            <li class="menu-item" data-page="costs">💰 费用统计</li>
+            <li class="menu-item" data-page="patterns">📈 使用模式</li>
         </ul>
-        <div style="padding:10px; border-top:1px solid #1f3a5f;"><button class="clear-btn" onclick="clearChatHistory()">清空当前对话</button></div>
-    </div>
+        </div>
     <div class="main">
         <div id="page-chat" class="page active">
-            <div class="page-header" style="padding:15px 30px;border-bottom:1px solid #1f3a5f;">
-                <h2 id="currentSessionTitle" style="font-size:18px;color:#e8e8e8;">💬 当前会话</h2>
+            <div class="page-header">
+                <h2 id="currentSessionTitle">💬 当前会话</h2>
+                <div class="header-actions">
+                    <button class="header-btn" onclick="createNewSession()" title="新建会话">➕</button>
+                    <button class="header-btn" onclick="clearChatHistory()" title="清空对话">🗑️</button>
+                </div>
             </div>
             <div class="chat-messages" id="chatMessages"></div>
             <div class="preview-container" id="previewContainer"><img class="preview-image" id="previewImage" src=""><button class="preview-remove" onclick="removeImage()">X</button></div>
@@ -286,17 +286,19 @@ def get_html_content():
                 </div>
             </div>
         </div>
-        <div id="page-memory" class="page"><div class="page-header"><h2>记忆管理 <button class="refresh-btn" onclick="loadMemory()">刷新</button></h2></div><div class="chat-messages" id="memory-content"><div class="loading"><div class="loading-spinner"></div>加载中...</div></div></div>
-        <div id="page-skills" class="page"><div class="page-header"><h2>技能列表 <button class="refresh-btn" onclick="loadSkills()">刷新</button></h2></div><div class="chat-messages" id="skills-content"><div class="loading"><div class="loading-spinner"></div>加载中...</div></div></div>
-        <div id="page-sessions" class="page"><div class="page-header"><h2>会话历史 <button class="refresh-btn" onclick="loadSessions()">刷新</button></h2></div><div class="chat-messages" id="sessions-content"><div class="loading"><div class="loading-spinner"></div>加载中...</div></div></div>
-        <div id="page-cron" class="page"><div class="page-header"><h2>定时任务 <button class="refresh-btn" onclick="loadCron()">刷新</button></h2></div><div class="chat-messages" id="cron-content"><div class="loading"><div class="loading-spinner"></div>加载中...</div></div></div>
-        <div id="page-projects" class="page"><div class="page-header"><h2>项目跟踪 <button class="refresh-btn" onclick="loadProjects()">刷新</button></h2></div><div class="chat-messages" id="projects-content"><div class="loading"><div class="loading-spinner"></div>加载中...</div></div></div>
-        <div id="page-costs" class="page"><div class="page-header"><h2>费用统计 <button class="refresh-btn" onclick="loadCosts()">刷新</button></h2></div><div class="chat-messages" id="costs-content"><div class="loading"><div class="loading-spinner"></div>加载中...</div></div></div>
-        <div id="page-patterns" class="page"><div class="page-header"><h2>使用模式 <button class="refresh-btn" onclick="loadPatterns()">刷新</button></h2></div><div class="chat-messages" id="patterns-content"><div class="loading"><div class="loading-spinner"></div>加载中...</div></div></div>
+        <div id="page-memory" class="page"><div class="page-header"><h2>🧠 记忆管理 <button class="refresh-btn" onclick="loadMemory()">刷新</button></h2></div><div class="chat-messages" id="memory-content"><div class="loading"><div class="loading-spinner"></div>加载中...</div></div></div>
+        <div id="page-skills" class="page"><div class="page-header"><h2>📚 技能列表 <button class="refresh-btn" onclick="loadSkills()">刷新</button></h2></div><div class="chat-messages" id="skills-content"><div class="loading"><div class="loading-spinner"></div>加载中...</div></div></div>
+        <div id="page-sessions" class="page"><div class="page-header"><h2>📋 会话历史 <button class="refresh-btn" onclick="loadSessions()">刷新</button></h2></div><div class="chat-messages" id="sessions-content"><div class="loading"><div class="loading-spinner"></div>加载中...</div></div></div>
+        <div id="page-cron" class="page"><div class="page-header"><h2>⏰ 定时任务 <button class="refresh-btn" onclick="loadCron()">刷新</button></h2></div><div class="chat-messages" id="cron-content"><div class="loading"><div class="loading-spinner"></div>加载中...</div></div></div>
+        <div id="page-projects" class="page"><div class="page-header"><h2>📊 项目跟踪 <button class="refresh-btn" onclick="loadProjects()">刷新</button></h2></div><div class="chat-messages" id="projects-content"><div class="loading"><div class="loading-spinner"></div>加载中...</div></div></div>
+        <div id="page-costs" class="page"><div class="page-header"><h2>💰 费用统计 <button class="refresh-btn" onclick="loadCosts()">刷新</button></h2></div><div class="chat-messages" id="costs-content"><div class="loading"><div class="loading-spinner"></div>加载中...</div></div></div>
+        <div id="page-patterns" class="page"><div class="page-header"><h2>📈 使用模式 <button class="refresh-btn" onclick="loadPatterns()">刷新</button></h2></div><div class="chat-messages" id="patterns-content"><div class="loading"><div class="loading-spinner"></div>加载中...</div></div></div>
     </div>
     <script>
 var CURRENT_SESSION='session_current';
-var currentImage=null,currentFile=null,chatMessages,messageInput,previewContainer,previewImage,filePreviewContainer,sendBtn;
+var currentImage=null,currentFile=null;
+var chatMessages,messageInput,previewContainer,previewImage,filePreviewContainer,sendBtn;
+
 window.onload=function(){
     chatMessages=document.getElementById('chatMessages');
     messageInput=document.getElementById('messageInput');
@@ -308,6 +310,7 @@ window.onload=function(){
     loadChatHistory();
     setupInput();
 };
+
 function initMenu(){
     var items=document.querySelectorAll('.menu-item');
     for(var i=0;i<items.length;i++){
@@ -330,11 +333,24 @@ function initMenu(){
     }
 }
 
+function createNewSession(){
+    var now=new Date();
+    var sessionName='session_'+now.toISOString().replace(/[:-]/g,'').split('.')[0].replace('T','_');
+    CURRENT_SESSION=sessionName;
+    chatMessages.innerHTML='';
+    addMessage('✨ 新会话已创建！有什么可以帮你的吗？',false,null,false);
+    updateSessionTitle();
+}
+
+function updateSessionTitle(){
+    var title=CURRENT_SESSION.replace(/_/g,' ').replace('session ','');
+    document.getElementById('currentSessionTitle').textContent='💬 '+title;
+}
+
 function switchSession(sessionId){
     CURRENT_SESSION=sessionId;
     loadChatHistory();
     updateSessionTitle();
-    // 切换到聊天页面
     var allItems=document.querySelectorAll('.menu-item');
     for(var j=0;j<allItems.length;j++)allItems[j].classList.remove('active');
     allItems[0].classList.add('active');
@@ -343,10 +359,6 @@ function switchSession(sessionId){
     document.getElementById('page-chat').classList.add('active');
 }
 
-function updateSessionTitle(){
-    var title=CURRENT_SESSION.replace(/_/g,' ').replace('session ','');
-    document.getElementById('currentSessionTitle').textContent='💬 '+title;
-}
 function setupInput(){
     messageInput.addEventListener('input',function(){this.style.height='auto';this.style.height=Math.min(this.scrollHeight,150)+'px';});
     messageInput.addEventListener('paste',function(e){
@@ -366,6 +378,7 @@ function setupInput(){
     document.getElementById('imageInput').addEventListener('change',handleImageSelect);
     document.getElementById('fileInput').addEventListener('change',handleFileSelect);
 }
+
 function showPreview(data){previewImage.src=data;previewContainer.classList.add('show');}
 function removeImage(){currentImage=null;previewContainer.classList.remove('show');document.getElementById('imageInput').value='';}
 function removeFile(){currentFile=null;filePreviewContainer.classList.remove('show');document.getElementById('fileInput').value='';}
@@ -373,9 +386,9 @@ function getFileIcon(name){var ext=name.split('.').pop().toLowerCase();var icons
 function formatFileSize(bytes){if(bytes<1024)return bytes+' B';if(bytes<1048576)return (bytes/1024).toFixed(1)+' KB';return (bytes/1048576).toFixed(1)+' MB';}
 function handleImageSelect(e){var file=e.target.files[0];if(file){var reader=new FileReader();reader.onload=function(evt){currentImage=evt.target.result;showPreview(currentImage);};reader.readAsDataURL(file);}}
 function handleFileSelect(e){var file=e.target.files[0];if(file){currentFile=file;document.getElementById('filePreviewIcon').innerHTML=getFileIcon(file.name);document.getElementById('filePreviewName').textContent=file.name;document.getElementById('filePreviewSize').textContent=formatFileSize(file.size);filePreviewContainer.classList.add('show');}}
+
 function loadChatHistory(){
     var sessionKey='hermes_chat_'+CURRENT_SESSION;
-    // 先从 localStorage 加载
     try{
         var saved=localStorage.getItem(sessionKey);
         if(saved){
@@ -385,7 +398,7 @@ function loadChatHistory(){
                 var msg=history[i];
                 var div=document.createElement('div');
                 div.className='message '+(msg.isUser?'user':'assistant');
-                var html='<div class="message-avatar">'+(msg.isUser?'U':'AI')+'</div><div class="message-content"><div class="message-text">'+msg.content+'</div>';
+                var html='<div class="message-avatar">'+(msg.isUser?'👤':'🤖')+'</div><div class="message-content"><div class="message-text">'+msg.content+'</div>';
                 if(msg.imageData)html+='<img class="message-image" src="'+msg.imageData+'">';
                 html+='</div>';
                 div.innerHTML=html;
@@ -394,10 +407,11 @@ function loadChatHistory(){
             chatMessages.scrollTop=chatMessages.scrollHeight;
         }else{
             chatMessages.innerHTML='';
-            addMessage('👋 你好！我是 Hermes Agent，有什么可以帮你的吗？\n\n支持文字和图片提问，直接在输入框按 Ctrl+V / Cmd+V 粘贴图片即可。',false,null,false);
+            addMessage('👋 你好！我是 Hermes Agent，有什么可以帮你的吗？',false,null,false);
         }
     }catch(e){console.error('Load error:',e);}
 }
+
 function saveChatHistory(){
     var sessionKey='hermes_chat_'+CURRENT_SESSION;
     try{
@@ -415,23 +429,16 @@ function saveChatHistory(){
         localStorage.setItem(sessionKey,JSON.stringify(msgs));
     }catch(e){console.error('Save error:',e);}
 }
+
 function addMessage(content,isUser,imageData,save){
     if(save===undefined)save=true;
     var div=document.createElement('div');
     div.className='message '+(isUser?'user':'assistant');
-    var avatar=isUser?'👤':'🤖';
-    var html='<div class="message-avatar">'+avatar+'</div><div class="message-content"><div class="message-text">'+content+'</div>';
+    var html='<div class="message-avatar">'+(isUser?'👤':'🤖')+'</div><div class="message-content"><div class="message-text">'+content+'</div>';
     if(imageData)html+='<img class="message-image" src="'+imageData+'">';
     html+='</div>';
     div.innerHTML=html;
-    if(isUser){
-        div.style.cursor='pointer';
-        div.title='右键点击重新编辑';
-        div.oncontextmenu=function(e){
-            e.preventDefault();
-            editMessage(this);
-        };
-    }
+    if(isUser){div.style.cursor='pointer';div.title='右键点击重新编辑';div.oncontextmenu=function(e){e.preventDefault();editMessage(this);};}
     chatMessages.appendChild(div);
     chatMessages.scrollTop=chatMessages.scrollHeight;
     if(save)saveChatHistory();
@@ -440,7 +447,6 @@ function addMessage(content,isUser,imageData,save){
 function editMessage(msgDiv){
     var textDiv=msgDiv.querySelector('.message-text');
     var content=textDiv?textDiv.textContent:'';
-    var img=msgDiv.querySelector('.message-image');
     if(confirm('确定要重新编辑这条消息吗？')){
         messageInput.value=content;
         messageInput.style.height='auto';
@@ -459,19 +465,19 @@ function typeMessage(content){
     chatMessages.appendChild(div);
     var textDiv=div.querySelector('.message-text');
     var i=0;
-    var speed=15;
     function type(){
         if(i<content.length){
             textDiv.textContent+=content.charAt(i);
             i++;
             chatMessages.scrollTop=chatMessages.scrollHeight;
-            setTimeout(type,speed);
+            setTimeout(type,15);
         }else{
             saveChatHistory();
         }
     }
     type();
 }
+
 function sendMessage(){
     var message=messageInput.value.trim();
     if(!message&&!currentImage&&!currentFile)return;
@@ -496,6 +502,7 @@ function sendMessage(){
         });
     }else{sendRequest(formData,fileToSend);}
 }
+
 function sendRequest(formData,file){
     if(file)formData.append('file',file);
     fetch('/api/chat',{method:'POST',body:formData}).then(function(r){return r.json();}).then(function(data){
@@ -509,6 +516,7 @@ function sendRequest(formData,file){
         sendBtn.disabled=false;
     });
 }
+
 function showLoading(){
     var div=document.createElement('div');
     div.className='message assistant';
@@ -517,8 +525,10 @@ function showLoading(){
     chatMessages.appendChild(div);
     chatMessages.scrollTop=chatMessages.scrollHeight;
 }
+
 function removeLoading(){var div=document.getElementById('loadingMsg');if(div)div.remove();}
 function clearChatHistory(){if(confirm('确定清空当前对话？')){var sessionKey='hermes_chat_'+CURRENT_SESSION;localStorage.removeItem(sessionKey);chatMessages.innerHTML='';addMessage('对话已清空',false,null,false);}}
+
 function loadMemory(){renderList.currentPage='memory';fetch('/api/memory').then(function(r){return r.json();}).then(renderList);}
 function loadSkills(){renderList.currentPage='skills';fetch('/api/skills').then(function(r){return r.json();}).then(renderList);}
 function loadSessions(){renderList.currentPage='sessions';fetch('/api/sessions').then(function(r){return r.json();}).then(renderList);}
@@ -526,21 +536,77 @@ function loadCron(){renderRaw.currentPage='cron';fetch('/api/cron').then(functio
 function loadProjects(){renderList.currentPage='projects';fetch('/api/projects').then(function(r){return r.json();}).then(renderList);}
 function loadCosts(){renderStats.currentPage='costs';fetch('/api/costs').then(function(r){return r.json();}).then(renderStats);}
 function loadPatterns(){renderStats.currentPage='patterns';fetch('/api/patterns').then(function(r){return r.json();}).then(renderStats);}
+
 function renderList(data){
     var html='<div class="card"><ul class="data-list">';
-    if(data.skills){for(var i=0;i<data.skills.length;i++){var s=data.skills[i];html+='<li><strong>'+s.name+'</strong> <span style="color:#00d9ff;">'+s.category+'</span><br><small>'+(s.description||'')+'</small></li>';}}
-    else if(data.sessions){for(var i=0;i<data.sessions.length;i++){var s=data.sessions[i];html+='<li><strong>'+(s.title||'未命名')+'</strong><br><small>'+(s.created||'')+' | '+s.messages+'条</small></li>';}}
+    if(data.skills){
+        // 按分类分组
+        var byCategory={};
+        for(var i=0;i<data.skills.length;i++){
+            var s=data.skills[i];
+            var cat=s.category||'其他';
+            if(!byCategory[cat])byCategory[cat]=[];
+            byCategory[cat].push(s);
+        }
+        // 排序分类
+        var categories=Object.keys(byCategory).sort();
+        for(var j=0;j<categories.length;j++){
+            var cat=categories[j];
+            html+='<li style="background:rgba(0,217,255,0.15);border-left-color:#00ff88;"><strong style="color:#00ff88;">📁 '+cat+' ('+byCategory[cat].length+')</strong></li>';
+            for(var i=0;i<byCategory[cat].length;i++){
+                var s=byCategory[cat][i];
+                var badge=s.source==='local'?'<span style="background:#00d9ff;color:#0f0f1a;padding:2px 6px;border-radius:4px;font-size:11px;margin-left:8px;">本地</span>':'';
+                html+='<li style="padding:8px 15px;"><code style="background:#0f0f1a;padding:4px 8px;border-radius:4px;color:#00d9ff;">'+s.name+'</code>'+badge+'</li>';
+            }
+        }
+    }
+    else if(data.sessions){
+        for(var i=0;i<data.sessions.length;i++){
+            var s=data.sessions[i];
+            html+='<li class="session-item" data-session-id="'+s.id+'" data-session-title="'+(s.title||'未命名').replace(/"/g,'&quot;')+'" style="cursor:pointer;">';
+            html+='<strong>'+(s.title||'未命名')+'</strong><br>';
+            html+='<small>'+(s.created||'')+' | '+s.messages+'条</small>';
+            html+='</li>';
+        }
+    }
     else if(data.projects||data.daily){var items=data.projects||data.daily;for(var i=0;i<items.length;i++)html+='<li>'+items[i]+'</li>';}
     else{html+='<li>暂无数据</li>';}
     html+='</ul></div>';
     var page=renderList.currentPage||'memory';
-    document.getElementById(page+'-content').innerHTML=html;
+    var contentDiv=document.getElementById(page+'-content');
+    contentDiv.innerHTML=html;
+    // 绑定会话点击事件
+    if(data.sessions){
+        var items=contentDiv.querySelectorAll('.session-item');
+        for(var i=0;i<items.length;i++){
+            items[i].onclick=function(){
+                var sessionId=this.getAttribute('data-session-id');
+                var sessionTitle=this.getAttribute('data-session-title');
+                openSession(sessionId,sessionTitle);
+            };
+        }
+    }
 }
+
+function openSession(sessionId,sessionTitle){
+    CURRENT_SESSION=sessionId;
+    updateSessionTitle();
+    loadChatHistory();
+    // 切换到聊天页面
+    var allItems=document.querySelectorAll('.menu-item');
+    for(var j=0;j<allItems.length;j++)allItems[j].classList.remove('active');
+    allItems[0].classList.add('active');
+    var allPages=document.querySelectorAll('.page');
+    for(var j=0;j<allPages.length;j++)allPages[j].classList.remove('active');
+    document.getElementById('page-chat').classList.add('active');
+}
+
 function renderRaw(data){
     var html='<div class="card"><pre style="background:#0f0f1a;padding:15px;border-radius:8px;white-space:pre-wrap;">'+(data.raw||'暂无数据')+'</pre></div>';
     var page=renderRaw.currentPage||'cron';
     document.getElementById(page+'-content').innerHTML=html;
 }
+
 function renderStats(data){
     var html='<div class="stats-grid">';
     if(data.sessions!==undefined)html+='<div class="stat-card"><div class="stat-value">'+data.sessions+'</div><div class="stat-label">会话数</div></div>';
