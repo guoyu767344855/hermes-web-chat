@@ -328,6 +328,7 @@ def get_html_content():
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Hermes Agent</title>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: linear-gradient(135deg, #0f0f1a 0%, #1a1a2e 50%, #16213e 100%); min-height: 100vh; display: flex; color: #e8e8e8; }
@@ -354,7 +355,23 @@ def get_html_content():
         .message.user { align-self: flex-end; flex-direction: row-reverse; }
         .message-avatar { width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 20px; flex-shrink: 0; }
         .message-content { background: #1a1a2e; padding: 15px 20px; border-radius: 16px; border: 1px solid #2a2a4e; max-width: 100%; overflow-wrap: break-word; word-wrap: break-word; word-break: break-word; }
-        .message-text { color: #e8e8e8; line-height: 1.6; font-size: 15px; white-space: pre-wrap; overflow-wrap: break-word; word-wrap: break-word; word-break: break-word; max-width: 100%; }
+        .message-text { color: #e8e8e8; line-height: 1.6; font-size: 15px; overflow-wrap: break-word; word-wrap: break-word; word-break: break-word; max-width: 100%; }
+        .message-text p { margin: 0.5em 0; }
+        .message-text p:first-child { margin-top: 0; }
+        .message-text p:last-child { margin-bottom: 0; }
+        .message-text code { background: #2a2a4e; padding: 2px 6px; border-radius: 4px; font-family: 'Consolas', 'Monaco', monospace; font-size: 13px; }
+        .message-text pre { background: #0f0f1a; padding: 12px; border-radius: 8px; overflow-x: auto; margin: 10px 0; }
+        .message-text pre code { background: transparent; padding: 0; color: #e8e8e8; }
+        .message-text ul, .message-text ol { margin: 10px 0; padding-left: 25px; }
+        .message-text li { margin: 5px 0; }
+        .message-text blockquote { border-left: 3px solid #00d9ff; padding-left: 15px; margin: 10px 0; color: #888; }
+        .message-text strong { color: #00d9ff; font-weight: 600; }
+        .message-text h1, .message-text h2, .message-text h3 { margin: 15px 0 10px; color: #00d9ff; }
+        .message-text h1 { font-size: 18px; }
+        .message-text h2 { font-size: 16px; }
+        .message-text h3 { font-size: 15px; }
+        .message-text a { color: #00d9ff; text-decoration: none; }
+        .message-text a:hover { text-decoration: underline; }
         .message-image { max-width: 100%; max-height: 400px; border-radius: 10px; margin-top: 10px; border: 2px solid #2a2a4e; }
         .input-container { padding: 20px 30px; background: rgba(15, 15, 26, 0.95); border-top: 1px solid #1f3a5f; }
         .input-wrapper { display: flex; gap: 15px; align-items: flex-end; background: #1a1a2e; border: 2px solid #2a2a4e; border-radius: 24px; padding: 8px 8px 8px 20px; }
@@ -761,6 +778,8 @@ function sendStreamRequest(formData,file){
                 }
                 // 直接追加完整数据块，避免逐字破坏中文
                 textDiv.textContent+=data;
+                // 实时渲染 Markdown
+                textDiv.innerHTML=marked.parse(textDiv.textContent);
                 chatMessages.scrollTop=chatMessages.scrollHeight;
             }
         }
@@ -980,7 +999,7 @@ function renderChatHistory(history){
         var msg=history[i];
         var div=document.createElement('div');
         div.className='message '+(msg.isUser?'user':'assistant');
-        var html='<div class="message-avatar">'+(msg.isUser?'👤':'🤖')+'</div><div class="message-content"><div class="message-text">'+msg.content+'</div>';
+        var html='<div class="message-avatar">'+(msg.isUser?'👤':'🤖')+'</div><div class="message-content"><div class="message-text">'+(msg.isUser?msg.content:marked.parse(msg.content))+'</div>';
         if(msg.imageData)html+='<img class="message-image" src="'+msg.imageData+'">';
         html+='</div>';
         div.innerHTML=html;
