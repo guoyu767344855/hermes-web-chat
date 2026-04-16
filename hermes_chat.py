@@ -186,7 +186,8 @@ def call_hermes_stream(message: str, image_path: Optional[str] = None) -> Genera
             yield "错误：找不到 hermes 命令，请确认已正确安装\n"
             return
         
-        cmd = [hermes_cmd, "chat", "-q", message or "你好", "--source", "web"]
+        # 使用 -Q 参数只输出回复，不显示工具列表等
+        cmd = [hermes_cmd, "chat", "-q", message or "你好", "-Q", "--source", "web"]
         if image_path: cmd.extend(["--image", image_path])
         
         # 使用 Popen 实现流式输出
@@ -725,47 +726,59 @@ function sendRequest(formData,file){
 
 function sendStreamRequest(formData,file){
     if(file)formData.append('file',file);
-    // 使用 EventSource 接收流式响应
-    removeLoading(); // 移除加载动画，准备接收流式内容
-    var assistantDiv=createAssistantMessage(); // 创建助手消息框
+    removeLoading();
+    var assistantDiv=createAssistantMessage();
     var textDiv=assistantDiv.querySelector('.message-text');
     var fullText='';
+    var buffer='';
     
     var xhr=new XMLHttpRequest();
     xhr.open('POST','/api/chat_stream',true);
-    xhr.onreadystatechange=function(){
-        if(xhr.readyState===3){ // 接收中
-            var text=xhr.responseText;
-            var lines=text.split('\\n\\n');
-            for(var i=0;i<lines.length;i++){
-                var line=lines[i];
-                if(line.startsWith('data: ')){
-                    var data=line.substring(6);
-                    if(data==='[DONE]'){
-                        sendBtn.disabled=false;
-                        messageInput.focus();
-                        saveChatHistory();
-                        return;
-                    }
-                    fullText+=data;
-                    textDiv.textContent=fullText;
-                    chatMessages.scrollTop=chatMessages.scrollHeight;
+    xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+    
+    var position=0;
+    xhr.onprogress=function(){
+        var text=xhr.responseText.substring(position);
+        position=xhr.responseText.length;
+        buffer+=text;
+        
+        // 处理 SSE 格式的数据
+        var lines=buffer.split('\\n');
+        buffer=lines.pop()||'';
+        
+        for(var i=0;i<lines.length;i++){
+            var line=lines[i].trim();
+            if(line.startsWith('data: ')){
+                var data=line.substring(6);
+                if(data==='[DONE]'){
+                    sendBtn.disabled=false;
+                    messageInput.focus();
+                    saveChatHistory();
+                    return;
                 }
+                fullText+=data+'\\n';
             }
-        }else if(xhr.readyState===4){
-            if(xhr.status!==200){
-                textDiv.textContent+='\\n[发送失败]';
-            }
-            sendBtn.disabled=false;
-            messageInput.focus();
-            saveChatHistory();
         }
+        
+        textDiv.textContent=fullText;
+        chatMessages.scrollTop=chatMessages.scrollHeight;
     };
+    
+    xhr.onload=function(){
+        if(xhr.status!==200){
+            textDiv.textContent+='\\n[发送失败]';
+        }
+        sendBtn.disabled=false;
+        messageInput.focus();
+        saveChatHistory();
+    };
+    
     xhr.onerror=function(){
         textDiv.textContent+='\\n[网络错误]';
         sendBtn.disabled=false;
         messageInput.focus();
     };
+    
     xhr.send(formData);
 }
 
