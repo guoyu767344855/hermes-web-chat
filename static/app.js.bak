@@ -1,20 +1,7 @@
-// Hermes Web Chat - Enhanced JavaScript
-// Optimized for better Markdown rendering and session management
 
 var CURRENT_SESSION='session_current';
 var currentImage=null,currentFile=null;
 var chatMessages,messageInput,previewContainer,previewImage,filePreviewContainer,sendBtn;
-
-// Configure marked.js for better Markdown rendering
-if(typeof marked!=='undefined'){
-    marked.setOptions({
-        breaks:true,           // Convert \n to <br>
-        gfm:true,              // GitHub Flavored Markdown
-        headerIds:true,        // Add IDs to headers
-        mangle:false,          // Don't escape header IDs
-        sanitize:false         // Don't sanitize HTML (allow custom styling)
-    });
-}
 
 window.onload=function(){
     chatMessages=document.getElementById('chatMessages');
@@ -26,7 +13,6 @@ window.onload=function(){
     initMenu();
     loadChatHistory();
     setupInput();
-    loadTheme();
 };
 
 function initMenu(){
@@ -47,7 +33,6 @@ function initMenu(){
             else if(page==='projects')loadProjects();
             else if(page==='costs')loadCosts();
             else if(page==='patterns')loadPatterns();
-            else if(page==='settings')loadSettings();
         };
     }
 }
@@ -101,7 +86,7 @@ function setupInput(){
 function showPreview(data){previewImage.src=data;previewContainer.classList.add('show');}
 function removeImage(){currentImage=null;previewContainer.classList.remove('show');document.getElementById('imageInput').value='';}
 function removeFile(){currentFile=null;filePreviewContainer.classList.remove('show');document.getElementById('fileInput').value='';}
-function getFileIcon(name){var ext=name.split('.').pop().toLowerCase();var icons={pdf:'📄',doc:'📝',docx:'📝',txt:'📄',md:'📄',py:'🐍',js:'📜',json:'📋',zip:'📦',rar:'📦',jpg:'🖼️',jpeg:'🖼️',png:'🖼️',gif:'🖼️'};return icons[ext]||'📎';}
+function getFileIcon(name){var ext=name.split('.').pop().toLowerCase();var icons={pdf:'PDF',doc:'DOC',txt:'TXT',zip:'ZIP',jpg:'IMG',png:'IMG'};return icons[ext]||'FILE';}
 function formatFileSize(bytes){if(bytes<1024)return bytes+' B';if(bytes<1048576)return (bytes/1024).toFixed(1)+' KB';return (bytes/1048576).toFixed(1)+' MB';}
 function handleImageSelect(e){var file=e.target.files[0];if(file){var reader=new FileReader();reader.onload=function(evt){currentImage=evt.target.result;showPreview(currentImage);};reader.readAsDataURL(file);}}
 function handleFileSelect(e){var file=e.target.files[0];if(file){currentFile=file;document.getElementById('filePreviewIcon').innerHTML=getFileIcon(file.name);document.getElementById('filePreviewName').textContent=file.name;document.getElementById('filePreviewSize').textContent=formatFileSize(file.size);filePreviewContainer.classList.add('show');}}
@@ -118,7 +103,7 @@ function loadChatHistory(){
                 var div=document.createElement('div');
                 div.className='message '+(msg.isUser?'user':'assistant');
                 // 用户消息保留换行，助手消息用 marked 渲染
-                var renderedContent=msg.isUser?escapeHtml(msg.content).split('\\n').join('<br>'):marked.parse(msg.content);
+                var renderedContent=msg.isUser?msg.content.split('\n').join('<br>'):marked.parse(msg.content);
                 var html='<div class="message-avatar">'+(msg.isUser?'👤':'🤖')+'</div><div class="message-content"><div class="message-text">'+renderedContent+'</div>';
                 if(msg.imageData)html+='<img class="message-image" src="'+msg.imageData+'">';
                 html+='</div>';
@@ -134,46 +119,6 @@ function loadChatHistory(){
     }catch(e){console.error('Load error:',e);}
 }
 
-// 检查 localStorage 剩余空间（字节）
-function getLocalStorageQuota(){
-    try{
-        var testKey='__quota_test__';
-        var start=Date.now();
-        var str='x';
-        while(str.length<1048576){str+=str;} // 快速生成 1MB 字符串
-        var i=0;
-        while(i<5242880){ // 最多尝试 5MB
-            localStorage.setItem(testKey,str.substring(0,i));
-            i+=10240; // 每次增加 10KB
-        }
-        localStorage.removeItem(testKey);
-        return i;
-    }catch(e){
-        localStorage.removeItem('__quota_test__');
-        return 0;
-    }
-}
-
-// 估算字符串大小（字节）
-function estimateSize(str){return new Blob([str]).size;}
-
-// 检查是否会超出配额
-function willExceedQuota(key,newValue){
-    try{
-        var currentSize=0;
-        for(var k in localStorage){
-            if(localStorage.hasOwnProperty(k)){
-                currentSize+=estimateSize(localStorage[k]);
-            }
-        }
-        var newSize=estimateSize(newValue);
-        // localStorage 通常限制 5-10MB，保守估计 4MB
-        return (currentSize+newSize)>4194304;
-    }catch(e){
-        return true; // 出错时假设会超限
-    }
-}
-
 function saveChatHistory(){
     var sessionKey='hermes_chat_'+CURRENT_SESSION;
     try{
@@ -185,82 +130,19 @@ function saveChatHistory(){
             var textDiv=div.querySelector('.message-text');
             var content=textDiv?textDiv.textContent:'';
             var img=div.querySelector('.message-image');
-            // 优化：如果图片是 base64 且较大，不存储到 localStorage
-            var imgData=null;
-            if(img){
-                var src=img.src;
-                // 如果是 base64 且超过 100KB，不存储
-                if(src.startsWith('data:')&&src.length>102400){
-                    imgData=null; // 不存储大图片
-                    console.log('Skip storing large image to localStorage');
-                }else{
-                    imgData=src;
-                }
-            }
-            msgs.push({content:content,isUser:isUser,imageData:imgData});
+            msgs.push({content:content,isUser:isUser,imageData:img?img.src:null});
         }
         if(msgs.length>100)msgs=msgs.slice(-100);
-        var jsonData=JSON.stringify(msgs);
-        // 检查是否会超出配额
-        if(willExceedQuota(sessionKey,jsonData)){
-            console.warn('LocalStorage quota warning, storing without images');
-            // 移除所有图片数据后重试
-            for(var j=0;j<msgs.length;j++){
-                msgs[j].imageData=null;
-            }
-            jsonData=JSON.stringify(msgs);
-        }
-        localStorage.setItem(sessionKey,jsonData);
-    }catch(e){
-        console.error('Save error:',e);
-        // 如果保存失败，尝试清理旧会话
-        if(e.name==='QuotaExceededError'){
-            clearOldSessions();
-        }
-    }
-}
-
-// 清理 7 天前的旧会话
-function clearOldSessions(){
-    try{
-        var now=new Date();
-        var cutoff=new Date(now.getTime()-7*24*60*60*1000); // 7 天前
-        var keysToRemove=[];
-        for(var k in localStorage){
-            if(k.startsWith('hermes_chat_session_')){
-                var dateStr=k.replace('hermes_chat_session_','').substring(0,8);
-                if(dateStr.length===8){
-                    var year=parseInt(dateStr.substring(0,4));
-                    var month=parseInt(dateStr.substring(4,6))-1;
-                    var day=parseInt(dateStr.substring(6,8));
-                    var sessionDate=new Date(year,month,day);
-                    if(sessionDate<cutoff){
-                        keysToRemove.push(k);
-                    }
-                }
-            }
-        }
-        for(var i=0;i<keysToRemove.length;i++){
-            localStorage.removeItem(keysToRemove[i]);
-            console.log('Removed old session:',keysToRemove[i]);
-        }
-    }catch(e){
-        console.error('Clear old sessions error:',e);
-    }
-}
-
-// HTML 转义函数，防止 XSS
-function escapeHtml(text){
-    var map={'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'};
-    return text.replace(/[&<>"']/g,function(m){return map[m];});
+        localStorage.setItem(sessionKey,JSON.stringify(msgs));
+    }catch(e){console.error('Save error:',e);}
 }
 
 function addMessage(content,isUser,imageData,save){
     if(save===undefined)save=true;
     var div=document.createElement('div');
     div.className='message '+(isUser?'user':'assistant');
-    // 用户消息进行 HTML 转义后保留换行，助手消息用 marked 渲染 Markdown
-    var renderedContent=isUser?escapeHtml(content).split('\\n').join('<br>'):marked.parse(content);
+    // 使用 marked 渲染 Markdown（包括换行）
+    var renderedContent=isUser?content:marked.parse(content);
     var html='<div class="message-avatar">'+(isUser?'👤':'🤖')+'</div><div class="message-content"><div class="message-text">'+renderedContent+'</div>';
     if(imageData)html+='<img class="message-image" src="'+imageData+'">';
     html+='</div>';
@@ -410,7 +292,7 @@ function sendStreamRequest(formData,file){
     
     xhr.onload=function(){
         if(xhr.status!==200){
-            if(textDiv) textDiv.innerHTML=marked.parse(textDiv.textContent+'\\n\\n**[发送失败]**');
+            if(textDiv) textDiv.textContent+=NL+'[发送失败]';
         }
         sendBtn.disabled=false;
         messageInput.focus();
@@ -418,12 +300,27 @@ function sendStreamRequest(formData,file){
     };
     
     xhr.onerror=function(){
-        if(textDiv) textDiv.innerHTML=marked.parse(textDiv.textContent+'\\n\\n**[网络错误]**');
+        if(textDiv) textDiv.textContent+=NL+'[网络错误]';
         sendBtn.disabled=false;
         messageInput.focus();
     };
     
     xhr.send(formData);
+}
+
+// 打字机效果显示文本
+function typeText(text, textDiv){
+    var chars=text.split('');
+    var index=0;
+    function type(){
+        if(index<chars.length){
+            textDiv.textContent+=chars[index];
+            index++;
+            chatMessages.scrollTop=chatMessages.scrollHeight;
+            setTimeout(type, 10+Math.random()*20); // 随机打字速度
+        }
+    }
+    type();
 }
 
 function createAssistantMessage(){
@@ -483,7 +380,7 @@ function filterMemory(){
     var cutoff=new Date();
     cutoff.setDate(cutoff.getDate()-parseInt(days));
     var filtered={daily:allMemoryData.daily.filter(function(item){
-        var match=item.match(/^> (\\d{4}-\\d{2}-\\d{2})/);
+        var match=item.match(/^> (\d{4}-\d{2}-\d{2})/);
         if(!match)return false;
         var d=new Date(match[1]);
         return d>=cutoff;
@@ -495,7 +392,6 @@ function loadCron(){renderRaw.currentPage='cron';fetch('/api/cron').then(functio
 function loadProjects(){renderList.currentPage='projects';fetch('/api/projects').then(function(r){return r.json();}).then(renderList);}
 function loadCosts(){renderStats.currentPage='costs';fetch('/api/costs').then(function(r){return r.json();}).then(renderStats);}
 function loadPatterns(){renderStats.currentPage='patterns';fetch('/api/patterns').then(function(r){return r.json();}).then(renderStats);}
-
 function renderList(data){
     var html='<div class="card"><ul class="data-list">';
     if(data.skills){
@@ -520,19 +416,15 @@ function renderList(data){
         }
     }
     else if(data.sessions){
-        if(data.sessions.length===0){
-            html+='<li style="color:#666;text-align:center;padding:20px;">暂无会话数据</li>';
-        }else{
-            for(var i=0;i<data.sessions.length;i++){
-                var s=data.sessions[i];
-                var SQ=String.fromCharCode(39);
-                var DQ=String.fromCharCode(34);
-                var safeTitle=String(s.title||'未命名').replace(new RegExp(SQ,'g'),'\\x27').replace(new RegExp(DQ,'g'),'\\x22');
-                html+='<li class="session-item" data-session-id="'+s.id+'" data-session-title="'+safeTitle+'" style="cursor:pointer;">';
-                html+='<strong>'+(s.title||'未命名')+'</strong><br>';
-                html+='<small>'+(s.created||'')+' | '+s.messages+' 条</small>';
-                html+='</li>';
-            }
+        for(var i=0;i<data.sessions.length;i++){
+            var s=data.sessions[i];
+            var SQ=String.fromCharCode(39);
+            var DQ=String.fromCharCode(34);
+            var safeTitle=String(s.title||'未命名').replace(new RegExp(SQ,'g'),'\x27').replace(new RegExp(DQ,'g'),'\x22');
+            html+='<li class="session-item" data-session-id="'+s.id+'" data-session-title="'+safeTitle+'" style="cursor:pointer;">';
+            html+='<strong>'+(s.title||'未命名')+'</strong><br>';
+            html+='<small>'+(s.created||'')+' | '+s.messages+'条</small>';
+            html+='</li>';
         }
     }
     else if(data.projects||data.daily){
@@ -595,33 +487,8 @@ function loadSessionDetail(){
         .then(function(data){
             if(data.messages && data.messages.length>0){
                 renderChatHistory(data.messages);
-                // 优化：只存储不带大图片的数据到 localStorage
-                var msgsToStore=[];
-                for(var i=0;i<data.messages.length;i++){
-                    var msg=data.messages[i];
-                    // 如果图片是 base64 且超过 100KB，不存储
-                    if(msg.imageData && msg.imageData.startsWith('data:') && msg.imageData.length>102400){
-                        msgsToStore.push({content:msg.content,isUser:msg.isUser,imageData:null});
-                        console.log('Skip storing large image from server response');
-                    }else{
-                        msgsToStore.push(msg);
-                    }
-                }
-                // 检查配额后再存储
-                try{
-                    var jsonData=JSON.stringify(msgsToStore);
-                    if(willExceedQuota(sessionKey,jsonData)){
-                        console.warn('LocalStorage quota warning for server-loaded session');
-                        // 移除所有图片
-                        for(var j=0;j<msgsToStore.length;j++){
-                            msgsToStore[j].imageData=null;
-                        }
-                        jsonData=JSON.stringify(msgsToStore);
-                    }
-                    localStorage.setItem(sessionKey,jsonData);
-                }catch(e){
-                    console.error('Save server session error:',e);
-                }
+                // 保存到 localStorage
+                localStorage.setItem(sessionKey,JSON.stringify(data.messages));
             }else{
                 chatMessages.innerHTML='';
                 addMessage('👋 你好！我是 Hermes Agent，有什么可以帮你的吗？',false,null,false);
@@ -630,7 +497,7 @@ function loadSessionDetail(){
         .catch(function(e){
             console.error('Load session detail error:',e);
             chatMessages.innerHTML='';
-            addMessage('⚠️ 加载会话失败：'+e.message,false,null,false);
+            addMessage('👋 你好！我是 Hermes Agent，有什么可以帮你的吗？',false,null,false);
         });
 }
 
@@ -642,7 +509,7 @@ function renderChatHistory(history){
         var div=document.createElement('div');
         div.className='message '+(msg.isUser?'user':'assistant');
         // 用户消息保留换行，助手消息用 marked 渲染
-        var renderedContent=msg.isUser?escapeHtml(msg.content).split(NL).join('<br>'):marked.parse(msg.content);
+        var renderedContent=msg.isUser?msg.content.split(NL).join('<br>'):marked.parse(msg.content);
         var html='<div class="message-avatar">'+(msg.isUser?'👤':'🤖')+'</div><div class="message-content"><div class="message-text">'+renderedContent+'</div>';
         if(msg.imageData)html+='<img class="message-image" src="'+msg.imageData+'">';
         html+='</div>';
@@ -654,7 +521,7 @@ function renderChatHistory(history){
 }
 
 function renderRaw(data){
-    var html='<div class="card"><pre style="background:#0f0f1a;padding:15px;border-radius:8px;white-space:pre-wrap;overflow-x:auto;">'+escapeHtml(data.raw||'暂无数据')+'</pre></div>';
+    var html='<div class="card"><pre style="background:#0f0f1a;padding:15px;border-radius:8px;white-space:pre-wrap;">'+(data.raw||'暂无数据')+'</pre></div>';
     var page=renderRaw.currentPage||'cron';
     document.getElementById(page+'-content').innerHTML=html;
 }
@@ -662,106 +529,11 @@ function renderRaw(data){
 function renderStats(data){
     var html='<div class="stats-grid">';
     if(data.sessions!==undefined)html+='<div class="stat-card"><div class="stat-value">'+data.sessions+'</div><div class="stat-label">会话数</div></div>';
-    if(data.total_tokens!==undefined)html+='<div class="stat-card"><div class="stat-value">'+(data.total_tokens/1000).toFixed(1)+'k</div><div class="stat-label">Token 用量</div></div>';
-    if(data.estimated_cost)html+='<div class="stat-card"><div class="stat-value">'+data.estimated_cost+'</div><div class="stat-label">预估费用</div></div>';
+    if(data.total_tokens!==undefined)html+='<div class="stat-card"><div class="stat-value">'+data.total_tokens+'</div><div class="stat-label">Token</div></div>';
+    if(data.estimated_cost)html+='<div class="stat-card"><div class="stat-value">'+data.estimated_cost+'</div><div class="stat-label">费用</div></div>';
     if(data.peak_hour)html+='<div class="stat-card"><div class="stat-value">'+data.peak_hour+':00</div><div class="stat-label">高峰时段</div></div>';
     html+='</div>';
-    
-    // 添加模型分布
-    if(data.models){
-        html+='<div class="card" style="margin-top:20px;"><h3 style="color:#00d9ff;margin-bottom:15px;">📊 模型使用分布</h3><ul class="data-list">';
-        for(var model in data.models){
-            html+='<li><code style="background:#0f0f1a;padding:4px 8px;border-radius:4px;color:#00d9ff;">'+model+'</code> <span style="color:#888;margin-left:10px;">'+data.models[model]+' 次会话</span></li>';
-        }
-        html+='</ul></div>';
-    }
-    
     var page=renderStats.currentPage||'costs';
     document.getElementById(page+'-content').innerHTML=html;
 }
-
-// 主题切换功能
-function loadTheme(){
-    var savedTheme=localStorage.getItem('hermes_theme')||'light';
-    applyTheme(savedTheme);
-}
-
-function switchTheme(theme){
-    applyTheme(theme);
-    localStorage.setItem('hermes_theme',theme);
-    updateThemeCards(theme);
-}
-
-function applyTheme(theme){
-    if(theme==='light'||theme===''){
-        document.documentElement.removeAttribute('data-theme');
-    }else{
-        document.documentElement.setAttribute('data-theme',theme);
-    }
-    updateThemeCards(theme);
-}
-
-function updateThemeCards(activeTheme){
-    var cards=document.querySelectorAll('.theme-card');
-    for(var i=0;i<cards.length;i++){
-        if(cards[i].getAttribute('data-theme')===activeTheme){
-            cards[i].classList.add('active');
-        }else{
-            cards[i].classList.remove('active');
-        }
-    }
-}
-
-function loadSettings(){
-    // 设置页面不需要加载数据，主题状态已保存
-    var savedTheme=localStorage.getItem('hermes_theme')||'light';
-    updateThemeCards(savedTheme);
-    // 显示存储信息
-    displayStorageInfo();
-}
-
-// 显示存储使用信息
-function displayStorageInfo(){
-    try{
-        var totalSize=0;
-        var sessionCount=0;
-        for(var k in localStorage){
-            if(localStorage.hasOwnProperty(k)){
-                totalSize+=estimateSize(localStorage[k]);
-                if(k.startsWith('hermes_chat_'))sessionCount++;
-            }
-        }
-        var sizeStr=totalSize<1024?totalSize+' B':(totalSize<1048576?(totalSize/1024).toFixed(1)+' KB':(totalSize/1048576).toFixed(2)+' MB');
-        var infoDiv=document.getElementById('storageInfo');
-        if(infoDiv){
-            infoDiv.innerHTML='📊 当前使用：<strong>'+sizeStr+'</strong> | 会话数：<strong>'+sessionCount+'</strong>';
-        }
-    }catch(e){
-        console.error('Display storage info error:',e);
-    }
-}
-
-// 清理所有本地会话数据
-function clearAllLocalStorage(){
-    if(!confirm('确定要清理所有本地会话数据吗？\\n\\n注意：\\n1. 这将删除所有保存在浏览器的聊天记录\\n2. 服务器上的会话历史不会受影响\\n3. 当前会话也会被清空\\n\\n此操作不可恢复！')){
-        return;
-    }
-    try{
-        var keysToRemove=[];
-        for(var k in localStorage){
-            if(k.startsWith('hermes_chat_')){
-                keysToRemove.push(k);
-            }
-        }
-        for(var i=0;i<keysToRemove.length;i++){
-            localStorage.removeItem(keysToRemove[i]);
-        }
-        // 清空当前聊天界面
-        chatMessages.innerHTML='';
-        addMessage('🗑️ 本地会话数据已清理',false,null,false);
-        displayStorageInfo();
-        alert('已清理 '+keysToRemove.length+' 个会话数据');
-    }catch(e){
-        alert('清理失败：'+e.message);
-    }
-}
+    

@@ -342,213 +342,87 @@ def get_html_content():
     <title>Hermes Agent</title>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js?v={timestamp}"></script>
     <style>
-        :root {{
-            /* 默认主题 - 浅色 */
-            --bg-primary: #f5f5f5;
-            --bg-secondary: #ffffff;
-            --bg-sidebar: #e8e8e8;
-            --bg-gradient: linear-gradient(135deg, #f5f5f5 0%, #e8e8e8 50%, #d0d0d0 100%);
-            --sidebar-gradient: linear-gradient(180deg, #e8e8e8 0%, #f5f5f5 100%);
-            --text-primary: #1a1a2e;
-            --text-secondary: #555;
-            --text-muted: #888;
-            --accent-primary: #0066cc;
-            --accent-secondary: #00aa55;
-            --accent-gradient: linear-gradient(135deg, #0066cc 0%, #0099ff 100%);
-            --border-color: #cccccc;
-            --border-light: #dddddd;
-            --message-bg: #ffffff;
-            --code-bg: #f0f0f0;
-            --code-text: #d63384;
-            --pre-bg: #1a1a2e;
-            --pre-text: #f8f8f2;
-            --blockquote-bg: rgba(0, 102, 204, 0.1);
-            --table-header-bg: rgba(0, 102, 204, 0.1);
-            --hover-bg: rgba(0, 102, 204, 0.1);
-            --italic-text: #997a00;
-        }}
-        /* 深空蓝主题 */
-        [data-theme="blue"] {{
-            --bg-primary: #0f0f1a;
-            --bg-secondary: #1a1a2e;
-            --bg-sidebar: #0a0a1a;
-            --bg-gradient: linear-gradient(135deg, #0f0f1a 0%, #1a1a2e 50%, #16213e 100%);
-            --sidebar-gradient: linear-gradient(180deg, #0a0a1a 0%, #1a1a2e 100%);
-            --text-primary: #e8e8e8;
-            --text-secondary: #888;
-            --text-muted: #666;
-            --accent-primary: #00d9ff;
-            --accent-secondary: #00ff88;
-            --accent-gradient: linear-gradient(135deg, #00d9ff 0%, #0099ff 100%);
-            --border-color: #1f3a5f;
-            --border-light: #2a2a4e;
-            --message-bg: #1a1a2e;
-            --code-bg: #2a2a4e;
-            --code-text: #ff79c6;
-            --pre-bg: #0f0f1a;
-            --pre-text: #f8f8f2;
-            --blockquote-bg: rgba(0, 217, 255, 0.05);
-            --table-header-bg: rgba(0, 217, 255, 0.1);
-            --hover-bg: rgba(0, 217, 255, 0.1);
-            --italic-text: #f1fa8c;
-        }}
-        /* 暗色主题 - 纯黑 */
-        [data-theme="dark"] {{
-            --bg-primary: #000000;
-            --bg-secondary: #121212;
-            --bg-sidebar: #0a0a0a;
-            --bg-gradient: linear-gradient(135deg, #000000 0%, #121212 50%, #1a1a1a 100%);
-            --sidebar-gradient: linear-gradient(180deg, #0a0a0a 0%, #121212 100%);
-            --text-primary: #e0e0e0;
-            --text-secondary: #a0a0a0;
-            --text-muted: #707070;
-            --accent-primary: #bb86fc;
-            --accent-secondary: #03dac6;
-            --accent-gradient: linear-gradient(135deg, #bb86fc 0%, #9965f4 100%);
-            --border-color: #333333;
-            --border-light: #2a2a2a;
-            --message-bg: #121212;
-            --code-bg: #2a2a2a;
-            --code-text: #ff79c6;
-            --pre-bg: #0a0a0a;
-            --pre-text: #f8f8f2;
-            --blockquote-bg: rgba(187, 134, 252, 0.1);
-            --table-header-bg: rgba(187, 134, 252, 0.1);
-            --hover-bg: rgba(187, 134, 252, 0.1);
-            --italic-text: #ffd700;
-        }}
-        /* 护眼主题 - 绿色 */
-        [data-theme="green"] {{
-            --bg-primary: #1a2f1a;
-            --bg-secondary: #2d4a2d;
-            --bg-sidebar: #152515;
-            --bg-gradient: linear-gradient(135deg, #1a2f1a 0%, #2d4a2d 50%, #3d5a3d 100%);
-            --sidebar-gradient: linear-gradient(180deg, #152515 0%, #2d4a2d 100%);
-            --text-primary: #d0e8d0;
-            --text-secondary: #a0c0a0;
-            --text-muted: #709070;
-            --accent-primary: #7ec87e;
-            --accent-secondary: #a0e8a0;
-            --accent-gradient: linear-gradient(135deg, #7ec87e 0%, #5cb85c 100%);
-            --border-color: #3d5a3d;
-            --border-light: #4a6a4a;
-            --message-bg: #2d4a2d;
-            --code-bg: #3d5a3d;
-            --code-text: #ff9ec6;
-            --pre-bg: #152515;
-            --pre-text: #f8f8f2;
-            --blockquote-bg: rgba(126, 200, 126, 0.1);
-            --table-header-bg: rgba(126, 200, 126, 0.1);
-            --hover-bg: rgba(126, 200, 126, 0.1);
-            --italic-text: #e8f87e;
-        }}
         * {{ margin: 0; padding: 0; box-sizing: border-box; }}
-        body {{ font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: var(--bg-gradient); min-height: 100vh; display: flex; color: var(--text-primary); }}
-        .sidebar {{ width: 260px; background: var(--sidebar-gradient); border-right: 1px solid var(--border-color); flex-shrink: 0; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }}
-        .logo {{ text-align: center; padding: 20px; border-bottom: 1px solid var(--border-color); position: relative; }}
-        .logo h1 {{ font-size: 24px; background: var(--accent-gradient); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }}
-        .logo p {{ color: var(--text-muted); font-size: 12px; margin-top: 5px; }}
-        .page-header {{ padding: 20px 30px; border-bottom: 1px solid var(--border-color); background: var(--bg-secondary); display: flex; justify-content: space-between; align-items: center; }}
-        .page-header h2 {{ font-size: 18px; color: var(--text-primary); margin: 0; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }}
+        body {{ font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: linear-gradient(135deg, #0f0f1a 0%, #1a1a2e 50%, #16213e 100%); min-height: 100vh; display: flex; color: #e8e8e8; }}
+        .sidebar {{ width: 260px; background: linear-gradient(180deg, #0a0a1a 0%, #1a1a2e 100%); border-right: 1px solid #1f3a5f; flex-shrink: 0; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }}
+        .logo {{ text-align: center; padding: 20px; border-bottom: 1px solid #1f3a5f; position: relative; }}
+        .logo h1 {{ font-size: 24px; background: linear-gradient(135deg, #00d9ff 0%, #00ff88 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }}
+        .logo p {{ color: #666; font-size: 12px; margin-top: 5px; }}
+        .page-header {{ padding: 20px 30px; border-bottom: 1px solid #1f3a5f; background: rgba(15, 15, 26, 0.8); display: flex; justify-content: space-between; align-items: center; }}
+        .page-header h2 {{ font-size: 18px; color: #e8e8e8; margin: 0; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }}
         .header-actions {{ display: flex; gap: 8px; }}
-        .header-btn {{ width: 32px; height: 32px; border-radius: 8px; border: none; background: var(--code-bg); color: var(--text-secondary); cursor: pointer; font-size: 16px; transition: all 0.2s; }}
-        .header-btn:hover {{ background: var(--accent-primary); color: white; }}
+        .header-btn {{ width: 32px; height: 32px; border-radius: 8px; border: none; background: #2a2a4e; color: #888; cursor: pointer; font-size: 16px; transition: all 0.2s; }}
+        .header-btn:hover {{ background: #00d9ff; color: white; }}
         .menu {{ list-style: none; padding: 10px; flex: 1; overflow-y: auto; }}
-        .menu-item {{ padding: 12px 16px; margin: 4px 0; border-radius: 8px; cursor: pointer; transition: all 0.2s; color: var(--text-secondary); }}
-        .menu-item:hover {{ background: var(--hover-bg); color: var(--accent-primary); }}
-        .menu-item.active {{ background: var(--accent-gradient); color: white; }}
+        .menu-item {{ padding: 12px 16px; margin: 4px 0; border-radius: 8px; cursor: pointer; transition: all 0.2s; color: #888; }}
+        .menu-item:hover {{ background: rgba(0, 217, 255, 0.1); color: #00d9ff; }}
+        .menu-item.active {{ background: linear-gradient(135deg, #00d9ff 0%, #0099ff 100%); color: white; }}
         .main {{ flex: 1; display: flex; flex-direction: column; overflow: hidden; }}
         .page {{ display: none; height: 100vh; flex-direction: column; }}
         .page.active {{ display: flex; }}
-        .page-header {{ padding: 20px 30px; border-bottom: 1px solid var(--border-color); background: var(--bg-secondary); }}
-        .page-header h2 {{ font-size: 18px; color: var(--text-primary); }}
+        .page-header {{ padding: 20px 30px; border-bottom: 1px solid #1f3a5f; background: rgba(15, 15, 26, 0.8); }}
+        .page-header h2 {{ font-size: 18px; color: #e8e8e8; }}
         .chat-messages {{ flex: 1; overflow-y: auto; overflow-x: hidden; padding: 30px; display: flex; flex-direction: column; gap: 20px; }}
         .message {{ display: flex; gap: 15px; max-width: 80%; }}
         .message.user {{ align-self: flex-end; flex-direction: row-reverse; }}
         .message-avatar {{ width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 20px; flex-shrink: 0; }}
-        .message-content {{ background: var(--message-bg); padding: 15px 20px; border-radius: 16px; border: 1px solid var(--border-light); max-width: 100%; overflow-wrap: break-word; word-wrap: break-word; word-break: break-word; }}
-        .message-text {{ color: var(--text-primary); line-height: 1.6; font-size: 15px; overflow-wrap: break-word; word-wrap: break-word; word-break: break-word; max-width: 100%; }}
+        .message-content {{ background: #1a1a2e; padding: 15px 20px; border-radius: 16px; border: 1px solid #2a2a4e; max-width: 100%; overflow-wrap: break-word; word-wrap: break-word; word-break: break-word; }}
+        .message-text {{ color: #e8e8e8; line-height: 1.6; font-size: 15px; overflow-wrap: break-word; word-wrap: break-word; word-break: break-word; max-width: 100%; }}
         .message-text p {{ margin: 0.5em 0; }}
         .message-text p:first-child {{ margin-top: 0; }}
         .message-text p:last-child {{ margin-bottom: 0; }}
-        .message-text code {{ background: var(--code-bg); padding: 2px 6px; border-radius: 4px; font-family: 'Consolas', 'Monaco', 'Courier New', monospace; font-size: 13px; color: var(--code-text); }}
-        .message-text pre {{ background: var(--pre-bg); padding: 15px; border-radius: 8px; overflow-x: auto; margin: 10px 0; border: 1px solid var(--border-light); }}
-        .message-text pre code {{ background: transparent; padding: 0; color: var(--pre-text); font-size: 13px; line-height: 1.5; }}
+        .message-text code {{ background: #2a2a4e; padding: 2px 6px; border-radius: 4px; font-family: 'Consolas', 'Monaco', monospace; font-size: 13px; }}
+        .message-text pre {{ background: #0f0f1a; padding: 12px; border-radius: 8px; overflow-x: auto; margin: 10px 0; }}
+        .message-text pre code {{ background: transparent; padding: 0; color: #e8e8e8; }}
         .message-text ul, .message-text ol {{ margin: 10px 0; padding-left: 25px; }}
         .message-text li {{ margin: 5px 0; }}
-        .message-text li::marker {{ color: var(--accent-primary); }}
-        .message-text blockquote {{ border-left: 3px solid var(--accent-primary); padding-left: 15px; margin: 10px 0; color: var(--text-secondary); background: var(--blockquote-bg); padding: 10px 15px; border-radius: 0 8px 8px 0; }}
-        .message-text strong {{ color: var(--accent-primary); font-weight: 600; }}
-        .message-text em {{ color: var(--italic-text); font-style: italic; }}
-        .message-text h1, .message-text h2, .message-text h3 {{ margin: 15px 0 10px; color: var(--accent-primary); }}
-        .message-text h1 {{ font-size: 20px; border-bottom: 1px solid var(--border-light); padding-bottom: 8px; }}
-        .message-text h2 {{ font-size: 18px; border-bottom: 1px solid var(--border-light); padding-bottom: 6px; }}
-        .message-text h3 {{ font-size: 16px; }}
-        .message-text a {{ color: var(--accent-primary); text-decoration: none; }}
+        .message-text blockquote {{ border-left: 3px solid #00d9ff; padding-left: 15px; margin: 10px 0; color: #888; }}
+        .message-text strong {{ color: #00d9ff; font-weight: 600; }}
+        .message-text h1, .message-text h2, .message-text h3 {{ margin: 15px 0 10px; color: #00d9ff; }}
+        .message-text h1 {{ font-size: 18px; }}
+        .message-text h2 {{ font-size: 16px; }}
+        .message-text h3 {{ font-size: 15px; }}
+        .message-text a {{ color: #00d9ff; text-decoration: none; }}
         .message-text a:hover {{ text-decoration: underline; }}
-        .message-text table {{ border-collapse: collapse; width: 100%; margin: 10px 0; }}
-        .message-text th, .message-text td {{ border: 1px solid var(--border-light); padding: 8px 12px; text-align: left; }}
-        .message-text th {{ background: var(--table-header-bg); color: var(--accent-primary); font-weight: 600; }}
-        .message-text tr:nth-child(even) {{ background: rgba(255, 255, 255, 0.02); }}
-        .message-text tr:hover {{ background: var(--hover-bg); }}
-        .message-text hr {{ border: none; border-top: 1px solid var(--border-light); margin: 20px 0; }}
-        .message-text img {{ max-width: 100%; border-radius: 8px; margin: 10px 0; }}
-        .message-image {{ max-width: 100%; max-height: 400px; border-radius: 10px; margin-top: 10px; border: 2px solid var(--border-light); }}
-        .input-container {{ padding: 20px 30px; background: var(--bg-secondary); border-top: 1px solid var(--border-color); }}
-        .input-wrapper {{ display: flex; gap: 15px; align-items: flex-end; background: var(--message-bg); border: 2px solid var(--border-light); border-radius: 24px; padding: 8px 8px 8px 20px; }}
-        #messageInput {{ flex: 1; background: transparent; border: none; outline: none; color: var(--text-primary); font-size: 15px; padding: 10px 0; resize: none; max-height: 150px; font-family: inherit; }}
+        .message-image {{ max-width: 100%; max-height: 400px; border-radius: 10px; margin-top: 10px; border: 2px solid #2a2a4e; }}
+        .input-container {{ padding: 20px 30px; background: rgba(15, 15, 26, 0.95); border-top: 1px solid #1f3a5f; }}
+        .input-wrapper {{ display: flex; gap: 15px; align-items: flex-end; background: #1a1a2e; border: 2px solid #2a2a4e; border-radius: 24px; padding: 8px 8px 8px 20px; }}
+        #messageInput {{ flex: 1; background: transparent; border: none; outline: none; color: #e8e8e8; font-size: 15px; padding: 10px 0; resize: none; max-height: 150px; font-family: inherit; }}
         .input-actions {{ display: flex; gap: 8px; }}
-        .action-btn {{ width: 44px; height: 44px; border-radius: 50%; border: none; cursor: pointer; background: var(--code-bg); color: var(--text-secondary); font-size: 20px; }}
-        .action-btn:hover {{ background: var(--border-light); color: var(--accent-primary); }}
-        #sendBtn {{ background: var(--accent-gradient); color: white; }}
-        .preview-container, .file-preview-container {{ display: none; padding: 10px 30px; background: var(--bg-secondary); border-top: 1px solid var(--border-color); }}
+        .action-btn {{ width: 44px; height: 44px; border-radius: 50%; border: none; cursor: pointer; background: #2a2a4e; color: #888; font-size: 20px; }}
+        .action-btn:hover {{ background: #3a3a5e; color: #00d9ff; }}
+        #sendBtn {{ background: linear-gradient(135deg, #00d9ff 0%, #0099ff 100%); color: white; }}
+        .preview-container, .file-preview-container {{ display: none; padding: 10px 30px; background: rgba(15, 15, 26, 0.95); border-top: 1px solid #1f3a5f; }}
         .preview-container.show, .file-preview-container.show {{ display: block; }}
-        .preview-image {{ max-height: 150px; border-radius: 10px; border: 2px solid var(--accent-primary); }}
+        .preview-image {{ max-height: 150px; border-radius: 10px; border: 2px solid #00d9ff; }}
         .preview-remove, .file-preview-remove {{ background: #ff4757; color: white; border: none; width: 24px; height: 24px; border-radius: 50%; cursor: pointer; float: right; }}
         #fileInput, #imageInput {{ display: none; }}
-        .card {{ background: var(--message-bg); border: 1px solid var(--border-light); border-radius: 12px; padding: 20px; margin-bottom: 20px; }}
+        .card {{ background: #1a1a2e; border: 1px solid #2a2a4e; border-radius: 12px; padding: 20px; margin-bottom: 20px; }}
         .data-list {{ list-style: none; }}
-        .data-list li {{ padding: 12px 15px; background: var(--hover-bg); border-radius: 8px; margin-bottom: 10px; border-left: 3px solid var(--accent-primary); }}
+        .data-list li {{ padding: 12px 15px; background: rgba(0, 217, 255, 0.05); border-radius: 8px; margin-bottom: 10px; border-left: 3px solid #00d9ff; }}
         .stats-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; }}
-        .stat-card {{ background: var(--sidebar-gradient); border: 1px solid var(--border-color); border-radius: 12px; padding: 25px; text-align: center; }}
-        .stat-value {{ font-size: 36px; font-weight: bold; color: var(--accent-primary); }}
-        .stat-label {{ color: var(--text-secondary); font-size: 14px; margin-top: 10px; }}
-        .loading {{ text-align: center; padding: 40px; color: var(--text-muted); }}
-        .loading-spinner {{ width: 40px; height: 40px; border: 3px solid var(--border-light); border-top-color: var(--accent-primary); border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 20px; }}
+        .stat-card {{ background: linear-gradient(135deg, #1a1a2e 0%, #1f3a5f 100%); border: 1px solid #2a4a6f; border-radius: 12px; padding: 25px; text-align: center; }}
+        .stat-value {{ font-size: 36px; font-weight: bold; color: #00d9ff; }}
+        .stat-label {{ color: #888; font-size: 14px; margin-top: 10px; }}
+        .loading {{ text-align: center; padding: 40px; color: #666; }}
+        .loading-spinner {{ width: 40px; height: 40px; border: 3px solid #2a2a4e; border-top-color: #00d9ff; border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 20px; }}
         @keyframes spin {{ to {{ transform: rotate(360deg); }} }}
         .typing-indicator {{ display: flex; gap: 4px; padding: 15px 20px; align-items: center; }}
-        .typing-dot {{ width: 8px; height: 8px; border-radius: 50%; background: var(--accent-primary); animation: typing-bounce 1.4s infinite ease-in-out; }}
+        .typing-dot {{ width: 8px; height: 8px; border-radius: 50%; background: #00d9ff; animation: typing-bounce 1.4s infinite ease-in-out; }}
         .typing-dot:nth-child(1) {{ animation-delay: 0s; }}
         .typing-dot:nth-child(2) {{ animation-delay: 0.2s; }}
         .typing-dot:nth-child(3) {{ animation-delay: 0.4s; }}
         @keyframes typing-bounce {{ 0%, 80%, 100% {{ transform: translateY(0); opacity: 0.3; }} 40% {{ transform: translateY(-6px); opacity: 1; }} }}
-        .refresh-btn {{ background: var(--code-bg); color: var(--accent-primary); border: none; padding: 8px 16px; border-radius: 8px; cursor: pointer; font-size: 13px; }}
-        .refresh-btn:hover {{ background: var(--accent-primary); color: var(--bg-primary); }}
+        .refresh-btn {{ background: #2a2a4e; color: #00d9ff; border: none; padding: 8px 16px; border-radius: 8px; cursor: pointer; font-size: 13px; }}
+        .refresh-btn:hover {{ background: #00d9ff; color: #0f0f1a; }}
         .filter-bar {{ display: inline-flex; align-items: center; }}
-        .filter-select {{ background: var(--code-bg); color: var(--text-primary); border: 1px solid var(--border-light); padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 13px; }}
-        .filter-select:hover {{ border-color: var(--accent-primary); }}
-        .filter-select:focus {{ outline: none; border-color: var(--accent-primary); }}
-        .clear-btn {{ width: calc(100% - 20px); margin: 10px; padding: 10px; background: var(--code-bg); color: #ff6b6b; border: none; border-radius: 8px; cursor: pointer; }}
+        .filter-select {{ background: #2a2a4e; color: #e8e8e8; border: 1px solid #3a3a5e; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 13px; }}
+        .filter-select:hover {{ border-color: #00d9ff; }}
+        .filter-select:focus {{ outline: none; border-color: #00d9ff; }}
+        .clear-btn {{ width: calc(100% - 20px); margin: 10px; padding: 10px; background: #2a2a4e; color: #ff6b6b; border: none; border-radius: 8px; cursor: pointer; }}
         ::-webkit-scrollbar {{ width: 8px; }}
-        ::-webkit-scrollbar-track {{ background: var(--bg-secondary); }}
-        ::-webkit-scrollbar-thumb {{ background: var(--border-light); border-radius: 4px; }}
-        /* 设置页面样式 */
-        .settings-container {{ max-width: 800px; padding: 20px; }}
-        .setting-section {{ margin-bottom: 30px; }}
-        .setting-title {{ font-size: 16px; color: #00d9ff; margin-bottom: 15px; display: flex; align-items: center; gap: 8px; }}
-        .theme-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; }}
-        .theme-card {{ background: var(--message-bg); border: 2px solid var(--border-light); border-radius: 12px; padding: 20px; cursor: pointer; transition: all 0.3s ease; text-align: center; position: relative; overflow: hidden; }}
-        .theme-card:hover {{ border-color: var(--accent-primary); transform: translateY(-5px); box-shadow: 0 8px 25px var(--hover-bg); }}
-        .theme-card:hover .theme-preview {{ transform: scale(1.1); }}
-        .theme-card:active {{ transform: translateY(-2px) scale(0.98); }}
-        .theme-card.active {{ border-color: var(--accent-primary); box-shadow: 0 0 25px var(--hover-bg); }}
-        .theme-card.active::after {{ content: '✓'; position: absolute; top: 10px; right: 10px; width: 24px; height: 24px; background: var(--accent-gradient); border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 14px; font-weight: bold; }}
-        .theme-preview {{ width: 60px; height: 60px; border-radius: 50%; margin: 0 auto 10px; border: 3px solid var(--border-light); transition: transform 0.3s ease; }}
-        .theme-name {{ color: var(--text-primary); font-size: 14px; font-weight: 500; transition: color 0.3s ease; }}
-        .theme-card.active .theme-name {{ color: var(--accent-primary); font-weight: 600; }}
-        .about-section {{ line-height: 1.8; color: var(--text-secondary); }}
-        .about-section p {{ margin-bottom: 10px; }}
-        .version-badge {{ display: inline-block; background: linear-gradient(135deg, #00d9ff 0%, #0099ff 100%); color: white; padding: 4px 12px; border-radius: 20px; font-size: 12px; margin-left: 10px; }}
+        ::-webkit-scrollbar-track {{ background: #1a1a2e; }}
+        ::-webkit-scrollbar-thumb {{ background: #2a2a4e; border-radius: 4px; }}
     </style>
 </head>
 <body>
@@ -566,7 +440,6 @@ def get_html_content():
             <li class="menu-item" data-page="projects">📊 项目跟踪</li>
             <li class="menu-item" data-page="costs">💰 费用统计</li>
             <li class="menu-item" data-page="patterns">📈 使用模式</li>
-            <li class="menu-item" data-page="settings">⚙️ 设置</li>
         </ul>
         </div>
     <div class="main">
@@ -633,51 +506,6 @@ def get_html_content():
         <div id="page-projects" class="page"><div class="page-header"><h2>📊 项目跟踪 <button class="refresh-btn" onclick="loadProjects()">刷新</button></h2></div><div class="chat-messages" id="projects-content"><div class="loading"><div class="loading-spinner"></div>加载中...</div></div></div>
         <div id="page-costs" class="page"><div class="page-header"><h2>💰 费用统计 <button class="refresh-btn" onclick="loadCosts()">刷新</button></h2></div><div class="chat-messages" id="costs-content"><div class="loading"><div class="loading-spinner"></div>加载中...</div></div></div>
         <div id="page-patterns" class="page"><div class="page-header"><h2>📈 使用模式 <button class="refresh-btn" onclick="loadPatterns()">刷新</button></h2></div><div class="chat-messages" id="patterns-content"><div class="loading"><div class="loading-spinner"></div>加载中...</div></div></div>
-        <div id="page-settings" class="page">
-            <div class="page-header">
-                <h2>⚙️ 设置</h2>
-            </div>
-            <div class="chat-messages">
-                <div class="settings-container">
-                    <div class="setting-section">
-                        <div class="setting-title">🗄️ 存储管理</div>
-                        <div class="setting-description">清理本地存储的会话数据，释放浏览器空间</div>
-                        <button class="action-btn" onclick="clearAllLocalStorage()" style="margin-top:10px;background:linear-gradient(135deg, #ff4444 0%, #ff6666 100%);">🗑️ 清理所有本地会话数据</button>
-                        <div id="storageInfo" style="margin-top:10px;color:var(--text-secondary);font-size:14px;"></div>
-                    </div>
-                    <div class="setting-section">
-                        <div class="setting-title">🎨 选择主题</div>
-                        <div class="theme-grid">
-                            <div class="theme-card" data-theme="light" onclick="switchTheme('light')">
-                                <div class="theme-preview" style="background: linear-gradient(135deg, #f5f5f5 0%, #e8e8e8 50%, #d0d0d0 100%);"></div>
-                                <div class="theme-name">浅色</div>
-                            </div>
-                            <div class="theme-card" data-theme="blue" onclick="switchTheme('blue')">
-                                <div class="theme-preview" style="background: linear-gradient(135deg, #0f0f1a 0%, #1a1a2e 50%, #16213e 100%);"></div>
-                                <div class="theme-name">深空蓝</div>
-                            </div>
-                            <div class="theme-card" data-theme="dark" onclick="switchTheme('dark')">
-                                <div class="theme-preview" style="background: linear-gradient(135deg, #000000 0%, #121212 50%, #1a1a1a 100%);"></div>
-                                <div class="theme-name">纯黑</div>
-                            </div>
-                            <div class="theme-card" data-theme="green" onclick="switchTheme('green')">
-                                <div class="theme-preview" style="background: linear-gradient(135deg, #1a2f1a 0%, #2d4a2d 50%, #3d5a3d 100%);"></div>
-                                <div class="theme-name">护眼绿</div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="setting-section">
-                        <div class="setting-title">📖 关于</div>
-                        <div class="about-section">
-                            <p><strong>Hermes Web Chat</strong> <span class="version-badge">v1.1.0</span></p>
-                            <p>Hermes Agent 的 Web 聊天界面插件，支持 Markdown 渲染、多主题切换、文件/图片上传等功能。</p>
-                            <p>📍 数据存储在本地浏览器 (localStorage) 和 Hermes 会话文件中</p>
-                            <p>🔧 主题偏好会自动保存，下次访问时自动应用</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
     </div>
     <script src="/static/app.js?v={timestamp}"></script>
 </body>
