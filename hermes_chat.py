@@ -559,9 +559,9 @@ def get_html_content():
         </div>
         <ul class="menu">
             <li class="menu-item active" data-page="chat">💬 聊天对话</li>
+            <li class="menu-item" data-page="sessions">📋 会话历史</li>
             <li class="menu-item" data-page="memory">🧠 记忆管理</li>
             <li class="menu-item" data-page="skills">📚 技能列表</li>
-            <li class="menu-item" data-page="sessions">📋 会话历史</li>
             <li class="menu-item" data-page="cron">⏰ 定时任务</li>
             <li class="menu-item" data-page="projects">📊 项目跟踪</li>
             <li class="menu-item" data-page="costs">💰 费用统计</li>
