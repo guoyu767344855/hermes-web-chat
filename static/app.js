@@ -367,6 +367,9 @@ function sendStreamRequest(formData,file){
     var textDiv=null;
     var thinkingContentDiv=null;
     var thinkingContent='';
+    var firstContent=true;
+    var startTime=Date.now();
+    var progressTimer=null;
     
     var xhr=new XMLHttpRequest();
     xhr.open('POST','/api/chat_stream',true);
@@ -385,16 +388,15 @@ function sendStreamRequest(formData,file){
         for(var i=0;i<lines.length;i++){
             var line=lines[i];
             if(line.startsWith('data: ')){
-                var data=line.substring(6);  // 去掉 'data: ' 前缀
+                var data=line.substring(6);
                 if(data==='[DONE]'){
-                    // 响应完成，将思考框内容移到正式消息框
+                    if(progressTimer) clearInterval(progressTimer);
                     if(thinkingContentDiv){
                         var thinkingContainer=thinkingContentDiv.closest('.thinking-container');
                         if(thinkingContainer){
                             removeLoading();
                             assistantDiv=createAssistantMessage();
                             textDiv=assistantDiv.querySelector('.message-text');
-                            // 直接使用 innerHTML 渲染 Markdown，不要先设置 textContent
                             textDiv.innerHTML=marked.parse(thinkingContent);
                             chatMessages.scrollTop=chatMessages.scrollHeight;
                             thinkingContainer.remove();
@@ -405,21 +407,31 @@ function sendStreamRequest(formData,file){
                     saveChatHistory();
                     return;
                 }
-                // 忽略空数据行
                 if(data==='') continue;
-                // 获取思考内容框，显示实时响应
-                if(!thinkingContentDiv){
+                if(firstContent){
                     thinkingContentDiv=document.getElementById('thinkingContent');
+                    firstContent=false;
+                    if(progressTimer) clearInterval(progressTimer);
                 }
-                if(thinkingContentDiv){
-                    thinkingContent+=data+'\n';  // 保留换行
-                    // 实时渲染 Markdown 到思考框
-                    thinkingContentDiv.innerHTML=marked.parse(thinkingContent);
-                    thinkingContentDiv.scrollTop=thinkingContentDiv.scrollHeight;
+                if(data.trim()){
+                    thinkingContent+=data+'\n';
+                    if(thinkingContentDiv){
+                        thinkingContentDiv.innerHTML=marked.parse(thinkingContent);
+                        thinkingContentDiv.scrollTop=thinkingContentDiv.scrollHeight;
+                    }
                 }
             }
         }
     };
+    
+    // 启动进度提示定时器
+    progressTimer=setInterval(function(){
+        var elapsed=((Date.now()-startTime)/1000).toFixed(1);
+        var progressDiv=document.getElementById('thinkingContent');
+        if(progressDiv && firstContent){
+            progressDiv.innerHTML='<p style="color:#888">正在思考中... 已 '+elapsed+' 秒</p>';
+        }
+    }, 1000);
     
     xhr.onload=function(){
         if(xhr.status!==200){

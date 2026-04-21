@@ -208,7 +208,7 @@ def call_hermes_stream(message: str, image_path: Optional[str] = None) -> Genera
         )
         
         # 实时读取输出，过滤 session_id 等系统信息
-        skip_next_empty = False
+        has_output = False
         for line in process.stdout:
             line = line.rstrip()  # 只去掉右侧空白
             # 跳过 session_id 行
@@ -225,6 +225,11 @@ def call_hermes_stream(message: str, image_path: Optional[str] = None) -> Genera
                 continue
             # 输出行
             yield line + '\n'
+            has_output = True
+        
+        # 如果没有任何输出，返回提示
+        if not has_output:
+            yield "没有收到回复\n"
         
         process.wait()
     except subprocess.TimeoutExpired:
@@ -330,7 +335,7 @@ async def chat_stream(message: str = Form(...), image: UploadFile = File(None), 
         
         def generate():
             for chunk in call_hermes_stream(msg, image_path):
-                # SSE 协议：每个消息以 data: 开头，以 \n\n 结束
+                # chunk 已经包含换行符，SSE 协议以 \n\n 结束
                 yield f"data: {chunk}\n\n"
             # 清理临时文件
             for p in [image_path, file_path]:
