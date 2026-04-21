@@ -117,8 +117,8 @@ function loadChatHistory(){
                 var msg=history[i];
                 var div=document.createElement('div');
                 div.className='message '+(msg.isUser?'user':'assistant');
-                // 用户消息保留换行，助手消息直接使用保存的 HTML（已渲染的 Markdown）
-                var renderedContent=msg.isUser?escapeHtml(msg.content).split('\n').join('<br>'):msg.content;
+                // 用户消息保留换行，助手消息用 marked 渲染
+                var renderedContent=msg.isUser?escapeHtml(msg.content).split('\\n').join('<br>'):marked.parse(msg.content);
                 var html='<div class="message-avatar">'+(msg.isUser?'👤':'🤖')+'</div><div class="message-content"><div class="message-text">'+renderedContent+'</div>';
                 if(msg.imageData)html+='<img class="message-image" src="'+msg.imageData+'">';
                 html+='</div>';
@@ -183,8 +183,7 @@ function saveChatHistory(){
             var div=divs[i];
             var isUser=div.classList.contains('user');
             var textDiv=div.querySelector('.message-text');
-            // 助手消息保存 innerHTML（已渲染的 Markdown），用户消息保存 textContent
-            var content=isUser?(textDiv?textDiv.textContent:''):(textDiv?textDiv.innerHTML:'');
+            var content=textDiv?textDiv.textContent:'';
             var img=div.querySelector('.message-image');
             // 优化：如果图片是 base64 且较大，不存储到 localStorage
             var imgData=null;
@@ -261,7 +260,7 @@ function addMessage(content,isUser,imageData,save){
     var div=document.createElement('div');
     div.className='message '+(isUser?'user':'assistant');
     // 用户消息进行 HTML 转义后保留换行，助手消息用 marked 渲染 Markdown
-    var renderedContent=isUser?escapeHtml(content).split('\n').join('<br>'):marked.parse(content);
+    var renderedContent=isUser?escapeHtml(content).split('\\n').join('<br>'):marked.parse(content);
     var html='<div class="message-avatar">'+(isUser?'👤':'🤖')+'</div><div class="message-content"><div class="message-text">'+renderedContent+'</div>';
     if(imageData)html+='<img class="message-image" src="'+imageData+'">';
     html+='</div>';
@@ -361,62 +360,50 @@ function sendRequest(formData,file){
 
 function sendStreamRequest(formData,file){
     if(file)formData.append('file',file);
-    showLoading();
+    showLoading(); // 显示打字动画
     var buffer='';
     var assistantDiv=null;
     var textDiv=null;
-    var thinkingContentDiv=null;
-    var thinkingContent='';
     
     var xhr=new XMLHttpRequest();
     xhr.open('POST','/api/chat_stream',true);
     
     var position=0;
     xhr.onprogress=function(){
+        // 移除加载动画，创建消息框（第一次收到数据时）
+        if(!assistantDiv){
+            removeLoading();
+            assistantDiv=createAssistantMessage();
+            textDiv=assistantDiv.querySelector('.message-text');
+        }
+        
         var text=xhr.responseText.substring(position);
         position=xhr.responseText.length;
         buffer+=text;
         
-        // 按行解析 SSE 协议
+        // 按 SSE 协议格式解析：每行以 data: 开头
         var NL=String.fromCharCode(10);
         var lines=buffer.split(NL);
         buffer=lines.pop()||'';
         
         for(var i=0;i<lines.length;i++){
-            var line=lines[i];
+            var line=lines[i].trim();
             if(line.startsWith('data: ')){
-                var data=line.substring(6);  // 去掉 'data: ' 前缀
+                var data=line.substring(6);
                 if(data==='[DONE]'){
-                    // 响应完成，将思考框内容移到正式消息框
-                    if(thinkingContentDiv){
-                        var thinkingContainer=thinkingContentDiv.closest('.thinking-container');
-                        if(thinkingContainer){
-                            removeLoading();
-                            assistantDiv=createAssistantMessage();
-                            textDiv=assistantDiv.querySelector('.message-text');
-                            // 直接使用 innerHTML 渲染 Markdown，不要先设置 textContent
-                            textDiv.innerHTML=marked.parse(thinkingContent);
-                            chatMessages.scrollTop=chatMessages.scrollHeight;
-                            thinkingContainer.remove();
-                        }
-                    }
                     sendBtn.disabled=false;
                     messageInput.focus();
                     saveChatHistory();
                     return;
                 }
-                // 忽略空数据行
-                if(data==='') continue;
-                // 获取思考内容框，显示实时响应
-                if(!thinkingContentDiv){
-                    thinkingContentDiv=document.getElementById('thinkingContent');
+                // 保留换行符，让 marked 正确解析 Markdown
+                if(textDiv.textContent.length>0 && !textDiv.textContent.endsWith(NL)){
+                    textDiv.textContent+=NL;
                 }
-                if(thinkingContentDiv){
-                    thinkingContent+=data+'\n';  // 保留换行
-                    // 实时渲染 Markdown 到思考框
-                    thinkingContentDiv.innerHTML=marked.parse(thinkingContent);
-                    thinkingContentDiv.scrollTop=thinkingContentDiv.scrollHeight;
-                }
+                textDiv.textContent+=data;
+                // 实时渲染 Markdown
+                textDiv.innerHTML=marked.parse(textDiv.textContent);
+                chatMessages.scrollTop=chatMessages.scrollHeight;
             }
         }
     };
@@ -453,7 +440,7 @@ function showLoading(){
     var div=document.createElement('div');
     div.className='message assistant';
     div.id='loadingMsg';
-    div.innerHTML='<div class="message-avatar">🤖</div><div class="message-content"><div class="thinking-container"><div class="thinking-header"><svg class="thinking-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><path d="M12 6v6l4 2"></path></svg>思考中...</div><div class="thinking-content" id="thinkingContent"></div></div></div>';
+    div.innerHTML='<div class="message-avatar">🤖</div><div class="message-content"><div class="typing-indicator"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div></div>';
     chatMessages.appendChild(div);
     chatMessages.scrollTop=chatMessages.scrollHeight;
 }

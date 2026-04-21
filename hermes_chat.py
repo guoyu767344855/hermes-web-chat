@@ -8,8 +8,15 @@ import subprocess, tempfile, os, json, glob, sys, shutil, platform
 from typing import Optional, Generator
 import uvicorn
 from datetime import datetime
+import base64
+import httpx
 
 app = FastAPI()
+
+# TikHub API 配置（备用）
+# TIKHUB_API_KEY = "qbUzWvgW0neLvmnJEtiKzjPrOSSSd6Rs0QvklU6YZM63pGaGIXbGWDi2AQ=="
+# TIKHUB_API_URL = "https://api.tikhub.io/v1/chat/completions"
+
 
 # 跨平台 HERMES_HOME 路径
 if platform.system() == "Windows":
@@ -186,8 +193,8 @@ def call_hermes_stream(message: str, image_path: Optional[str] = None) -> Genera
             yield "错误：找不到 hermes 命令，请确认已正确安装\n"
             return
         
-        # 使用 -Q 参数只输出回复，不显示工具列表等
-        cmd = [hermes_cmd, "chat", "-q", message or "你好", "-Q", "--source", "web"]
+        # 不使用 -Q 参数，实现真正的流式输出
+        cmd = [hermes_cmd, "chat", "-q", message or "你好", "--source", "web"]
         if image_path: cmd.extend(["--image", image_path])
         
         # 使用 Popen 实现流式输出
@@ -200,10 +207,24 @@ def call_hermes_stream(message: str, image_path: Optional[str] = None) -> Genera
             env={**os.environ, "HERMES_HOME": str(HERMES_HOME)}
         )
         
-        # 实时读取输出
+        # 实时读取输出，过滤 session_id 等系统信息
+        skip_next_empty = False
         for line in process.stdout:
-            if line.strip():
-                yield line
+            line = line.rstrip()  # 只去掉右侧空白
+            # 跳过 session_id 行
+            if line.startswith('session_id:'):
+                continue
+            # 跳过 Query 行（用户输入）
+            if line.startswith('Query:'):
+                continue
+            # 跳过思考过程日志（Initializing agent 等）
+            if line.startswith('Initializing') or line.startswith('|'):
+                continue
+            # 跳过空行
+            if not line:
+                continue
+            # 输出行
+            yield line + '\n'
         
         process.wait()
     except subprocess.TimeoutExpired:
@@ -220,7 +241,23 @@ def call_hermes(message: str, image_path: Optional[str] = None) -> str:
         cmd = [hermes_cmd, "chat", "-q", message or "你好", "-Q", "--source", "web"]
         if image_path: cmd.extend(["--image", image_path])
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=300, env={**os.environ, "HERMES_HOME": str(HERMES_HOME)})
-        return result.stdout.strip() or result.stderr.strip() or "没有回复"
+        # 过滤不需要的行，保留格式
+        lines = []
+        for line in (result.stdout or '').split('\n'):
+            line = line.rstrip()  # 只去掉右侧空白
+            if line.startswith('session_id:'):
+                continue
+            if line.startswith('Query:'):
+                continue
+            if line.startswith('Initializing') or line.startswith('|'):
+                continue
+            lines.append(line)  # 保留所有行（包括空行）
+        # 移除开头和结尾的多余空行
+        while lines and not lines[0]:
+            lines.pop(0)
+        while lines and not lines[-1]:
+            lines.pop()
+        return '\n'.join(lines) or result.stderr.strip() or "没有回复"
     except subprocess.TimeoutExpired: return "请求超时"
     except Exception as e: return f"错误：{e}"
 
@@ -293,6 +330,7 @@ async def chat_stream(message: str = Form(...), image: UploadFile = File(None), 
         
         def generate():
             for chunk in call_hermes_stream(msg, image_path):
+                # SSE 协议：每个消息以 data: 开头，以 \n\n 结束
                 yield f"data: {chunk}\n\n"
             # 清理临时文件
             for p in [image_path, file_path]:
@@ -522,6 +560,51 @@ def get_html_content():
         .typing-dot:nth-child(2) {{ animation-delay: 0.2s; }}
         .typing-dot:nth-child(3) {{ animation-delay: 0.4s; }}
         @keyframes typing-bounce {{ 0%, 80%, 100% {{ transform: translateY(0); opacity: 0.3; }} 40% {{ transform: translateY(-6px); opacity: 1; }} }}
+        /* 思考过程显示框 */
+        .thinking-container {{ 
+            background: var(--bg-secondary); 
+            border: 1px solid var(--border-light); 
+            border-left: 3px solid var(--accent-primary);
+            border-radius: 8px; 
+            padding: 12px 16px; 
+            margin: 10px 0;
+            max-width: 100%;
+        }}
+        .thinking-header {{ 
+            display: flex; 
+            align-items: center; 
+            gap: 8px; 
+            margin-bottom: 8px; 
+            font-size: 13px; 
+            color: var(--accent-primary);
+            font-weight: 600;
+        }}
+        .thinking-icon {{ 
+            width: 16px; 
+            height: 16px; 
+            animation: thinking-pulse 1.5s ease-in-out infinite;
+        }}
+        @keyframes thinking-pulse {{ 
+            0%, 100% {{ transform: scale(1); opacity: 1; }} 
+            50% {{ transform: scale(1.2); opacity: 0.7; }} 
+        }}
+        .thinking-content {{ 
+            background: var(--pre-bg); 
+            border-radius: 6px; 
+            padding: 12px; 
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            font-size: 13px;
+            line-height: 1.5;
+            color: var(--text-secondary);
+            max-height: 200px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }}
+        .thinking-content::-webkit-scrollbar {{ width: 6px; }}
+        .thinking-content::-webkit-scrollbar-track {{ background: var(--bg-secondary); }}
+        .thinking-content::-webkit-scrollbar-thumb {{ background: var(--border-light); border-radius: 3px; }}
+        .thinking-content::-webkit-scrollbar-thumb:hover {{ background: var(--accent-primary); }}
         .refresh-btn {{ background: var(--code-bg); color: var(--accent-primary); border: none; padding: 8px 16px; border-radius: 8px; cursor: pointer; font-size: 13px; }}
         .refresh-btn:hover {{ background: var(--accent-primary); color: var(--bg-primary); }}
         .filter-bar {{ display: inline-flex; align-items: center; }}
