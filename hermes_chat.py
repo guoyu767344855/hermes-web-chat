@@ -533,22 +533,65 @@ def get_html_content():
         ::-webkit-scrollbar-track {{ background: var(--bg-secondary); }}
         ::-webkit-scrollbar-thumb {{ background: var(--border-light); border-radius: 4px; }}
         /* 设置页面样式 */
-        .settings-container {{ max-width: 800px; padding: 20px; }}
-        .setting-section {{ margin-bottom: 30px; }}
-        .setting-title {{ font-size: 16px; color: #00d9ff; margin-bottom: 15px; display: flex; align-items: center; gap: 8px; }}
-        .theme-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; }}
-        .theme-card {{ background: var(--message-bg); border: 2px solid var(--border-light); border-radius: 12px; padding: 20px; cursor: pointer; transition: all 0.3s ease; text-align: center; position: relative; overflow: hidden; }}
-        .theme-card:hover {{ border-color: var(--accent-primary); transform: translateY(-5px); box-shadow: 0 8px 25px var(--hover-bg); }}
-        .theme-card:hover .theme-preview {{ transform: scale(1.1); }}
-        .theme-card:active {{ transform: translateY(-2px) scale(0.98); }}
-        .theme-card.active {{ border-color: var(--accent-primary); box-shadow: 0 0 25px var(--hover-bg); }}
-        .theme-card.active::after {{ content: '✓'; position: absolute; top: 10px; right: 10px; width: 24px; height: 24px; background: var(--accent-gradient); border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 14px; font-weight: bold; }}
-        .theme-preview {{ width: 60px; height: 60px; border-radius: 50%; margin: 0 auto 10px; border: 3px solid var(--border-light); transition: transform 0.3s ease; }}
-        .theme-name {{ color: var(--text-primary); font-size: 14px; font-weight: 500; transition: color 0.3s ease; }}
-        .theme-card.active .theme-name {{ color: var(--accent-primary); font-weight: 600; }}
+        .settings-container {{ max-width: 900px; margin: 0 auto; padding: 10px; }}
+        .setting-section {{ 
+            background: var(--message-bg); 
+            border: 1px solid var(--border-light); 
+            border-radius: 16px; 
+            padding: 24px; 
+            margin-bottom: 24px;
+            transition: all 0.3s ease;
+        }}
+        .setting-section:hover {{ border-color: var(--accent-primary); box-shadow: 0 4px 20px rgba(0,217,255,0.1); }}
+        .setting-header {{ display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }}
+        .setting-icon {{ font-size: 24px; }}
+        .setting-title {{ font-size: 18px; color: var(--accent-primary); font-weight: 600; margin: 0; }}
+        .setting-description {{ color: var(--text-secondary); font-size: 14px; margin: 8px 0 16px 34px; line-height: 1.6; }}
+        .theme-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 20px; margin-top: 16px; }}
+        .theme-card {{ 
+            background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--message-bg) 100%); 
+            border: 2px solid var(--border-light); 
+            border-radius: 16px; 
+            padding: 24px 20px; 
+            cursor: pointer; 
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); 
+            text-align: center; 
+            position: relative; 
+            overflow: hidden;
+        }}
+        .theme-card::before {{ content: ''; position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: linear-gradient(135deg, transparent 0%, rgba(0,217,255,0.05) 100%); opacity: 0; transition: opacity 0.3s ease; }}
+        .theme-card:hover {{ border-color: var(--accent-primary); transform: translateY(-6px); box-shadow: 0 12px 40px rgba(0,217,255,0.15); }}
+        .theme-card:hover::before {{ opacity: 1; }}
+        .theme-card:hover .theme-preview {{ transform: scale(1.08); box-shadow: 0 8px 25px rgba(0,0,0,0.3); }}
+        .theme-card:active {{ transform: translateY(-3px) scale(0.98); }}
+        .theme-card.active {{ border-color: var(--accent-primary); box-shadow: 0 0 30px rgba(0,217,255,0.2); background: linear-gradient(135deg, rgba(0,217,255,0.05) 0%, rgba(0,217,255,0.1) 100%); }}
+        .theme-card.active::after {{ content: '✓'; position: absolute; top: 12px; right: 12px; width: 28px; height: 28px; background: linear-gradient(135deg, #00d9ff 0%, #0099ff 100%); border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 16px; font-weight: bold; box-shadow: 0 4px 15px rgba(0,217,255,0.4); animation: checkmark-pop 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55); }}
+        @keyframes checkmark-pop {{ 0% {{ transform: scale(0); opacity: 0; }} 70% {{ transform: scale(1.2); }} 100% {{ transform: scale(1); opacity: 1; }} }}
+        .theme-preview {{ width: 70px; height: 70px; border-radius: 16px; margin: 0 auto 14px; border: 3px solid var(--border-light); transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); position: relative; z-index: 1; box-shadow: 0 4px 15px rgba(0,0,0,0.2); }}
+        .theme-name {{ color: var(--text-primary); font-size: 15px; font-weight: 500; transition: all 0.3s ease; position: relative; z-index: 1; }}
+        .theme-card.active .theme-name {{ color: var(--accent-primary); font-weight: 700; text-shadow: 0 0 10px rgba(0,217,255,0.3); }}
         .about-section {{ line-height: 1.8; color: var(--text-secondary); }}
-        .about-section p {{ margin-bottom: 10px; }}
-        .version-badge {{ display: inline-block; background: linear-gradient(135deg, #00d9ff 0%, #0099ff 100%); color: white; padding: 4px 12px; border-radius: 20px; font-size: 12px; margin-left: 10px; }}
+        .about-section p {{ margin-bottom: 12px; }}
+        .version-badge {{ display: inline-block; background: linear-gradient(135deg, #00d9ff 0%, #0099ff 100%); color: white; padding: 4px 14px; border-radius: 20px; font-size: 12px; font-weight: 600; margin-left: 10px; box-shadow: 0 2px 10px rgba(0,217,255,0.3); }}
+        .storage-action-btn {{ 
+            background: linear-gradient(135deg, #ff4444 0%, #ff6666 100%); 
+            color: white; 
+            border: none; 
+            border-radius: 10px; 
+            padding: 12px 24px; 
+            font-size: 14px; 
+            font-weight: 500; 
+            cursor: pointer; 
+            transition: all 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 12px;
+            box-shadow: 0 4px 15px rgba(255,68,68,0.3);
+        }}
+        .storage-action-btn:hover {{ transform: translateY(-2px); box-shadow: 0 6px 25px rgba(255,68,68,0.4); }}
+        .storage-action-btn:active {{ transform: translateY(0); }}
+        .storage-info {{ margin-top: 16px; padding: 12px 16px; background: var(--bg-secondary); border-radius: 10px; font-size: 13px; color: var(--text-secondary); border-left: 3px solid var(--accent-primary); }}
     </style>
 </head>
 <body>
@@ -640,17 +683,27 @@ def get_html_content():
             <div class="chat-messages">
                 <div class="settings-container">
                     <div class="setting-section">
-                        <div class="setting-title">🗄️ 存储管理</div>
-                        <div class="setting-description">清理本地存储的会话数据，释放浏览器空间</div>
-                        <button class="action-btn" onclick="clearAllLocalStorage()" style="margin-top:10px;background:linear-gradient(135deg, #ff4444 0%, #ff6666 100%);">🗑️ 清理所有本地会话数据</button>
-                        <div id="storageInfo" style="margin-top:10px;color:var(--text-secondary);font-size:14px;"></div>
+                        <div class="setting-header">
+                            <span class="setting-icon">🗄️</span>
+                            <h3 class="setting-title">存储管理</h3>
+                        </div>
+                        <div class="setting-description">清理本地存储的会话数据，释放浏览器空间。此操作仅影响浏览器缓存，服务器上的会话文件不受影响。</div>
+                        <button class="storage-action-btn" onclick="clearAllLocalStorage()">
+                            <span>🗑️</span>
+                            <span>清理所有本地会话数据</span>
+                        </button>
+                        <div id="storageInfo" class="storage-info"></div>
                     </div>
                     <div class="setting-section">
-                        <div class="setting-title">🎨 选择主题</div>
+                        <div class="setting-header">
+                            <span class="setting-icon">🎨</span>
+                            <h3 class="setting-title">主题选择</h3>
+                        </div>
+                        <div class="setting-description">选择您喜欢的界面主题，偏好会自动保存，下次访问时自动应用。</div>
                         <div class="theme-grid">
                             <div class="theme-card" data-theme="light" onclick="switchTheme('light')">
                                 <div class="theme-preview" style="background: linear-gradient(135deg, #f5f5f5 0%, #e8e8e8 50%, #d0d0d0 100%);"></div>
-                                <div class="theme-name">浅色</div>
+                                <div class="theme-name">浅色主题</div>
                             </div>
                             <div class="theme-card" data-theme="blue" onclick="switchTheme('blue')">
                                 <div class="theme-preview" style="background: linear-gradient(135deg, #0f0f1a 0%, #1a1a2e 50%, #16213e 100%);"></div>
@@ -658,7 +711,7 @@ def get_html_content():
                             </div>
                             <div class="theme-card" data-theme="dark" onclick="switchTheme('dark')">
                                 <div class="theme-preview" style="background: linear-gradient(135deg, #000000 0%, #121212 50%, #1a1a1a 100%);"></div>
-                                <div class="theme-name">纯黑</div>
+                                <div class="theme-name">纯黑主题</div>
                             </div>
                             <div class="theme-card" data-theme="green" onclick="switchTheme('green')">
                                 <div class="theme-preview" style="background: linear-gradient(135deg, #1a2f1a 0%, #2d4a2d 50%, #3d5a3d 100%);"></div>
@@ -667,10 +720,13 @@ def get_html_content():
                         </div>
                     </div>
                     <div class="setting-section">
-                        <div class="setting-title">📖 关于</div>
+                        <div class="setting-header">
+                            <span class="setting-icon">📖</span>
+                            <h3 class="setting-title">关于</h3>
+                        </div>
                         <div class="about-section">
-                            <p><strong>Hermes Web Chat</strong> <span class="version-badge">v1.1.0</span></p>
-                            <p>Hermes Agent 的 Web 聊天界面插件，支持 Markdown 渲染、多主题切换、文件/图片上传等功能。</p>
+                            <p><strong>Hermes Web Chat</strong> <span class="version-badge">v1.10.0</span></p>
+                            <p>Hermes Agent 的现代化 Web 聊天界面插件，支持 Markdown 渲染、多主题切换、文件/图片上传、流式响应等功能。</p>
                             <p>📍 数据存储在本地浏览器 (localStorage) 和 Hermes 会话文件中</p>
                             <p>🔧 主题偏好会自动保存，下次访问时自动应用</p>
                         </div>
