@@ -4,6 +4,8 @@
 var CURRENT_SESSION='session_current';
 var currentImage=null,currentFile=null;
 var chatMessages,messageInput,previewContainer,previewImage,filePreviewContainer,sendBtn;
+var currentXhr=null;  // 保存当前请求，用于中止
+var isThinking=false;  // 标记是否正在思考中
 
 // Configure marked.js for better Markdown rendering
 if(typeof marked!=='undefined'){
@@ -120,6 +122,13 @@ function loadChatHistory(){
                 // 用户消息保留换行，助手消息直接使用保存的 HTML（已渲染的 Markdown）
                 var renderedContent=msg.isUser?escapeHtml(msg.content).split('\n').join('<br>'):msg.content;
                 var html='<div class="message-avatar">'+(msg.isUser?'👤':'🤖')+'</div><div class="message-content"><div class="message-text">'+renderedContent+'</div>';
+                // 添加选择按钮（仅助手消息，从原始内容检测）
+                if(!msg.isUser){
+                    var choiceButtons=renderChoiceButtons(msg.content,false);
+                    if(choiceButtons){
+                        html+=choiceButtons;
+                    }
+                }
                 if(msg.imageData)html+='<img class="message-image" src="'+msg.imageData+'">';
                 html+='</div>';
                 div.innerHTML=html;
@@ -256,6 +265,122 @@ function escapeHtml(text){
     return text.replace(/[&<>"']/g,function(m){return map[m];});
 }
 
+// 检测并渲染选择按钮
+// 支持格式：1. xxx 2. xxx / A) xxx B) xxx / [1] xxx [2] xxx
+// 也支持行内多个选项：1. xxx 2. xxx 3. xxx
+function renderChoiceButtons(content,isUser){
+    if(isUser)return '';  // 用户消息不显示选择按钮
+    
+    var choices=[];
+    var lines=content.split('\n');
+    
+    // 方案 1: 检测每行开头的编号
+    var linePatterns=[
+        {regex:/^\s*(\d+)\.\s*(.+)$/,type:'num'},
+        {regex:/^\s*([A-Za-z])\)\s*(.+)$/,type:'letter'},
+        {regex:/^\s*\[(\d+)\]\s*(.+)$/,type:'bracket'}
+    ];
+    
+    for(var i=0;i<lines.length;i++){
+        var line=lines[i].trim();
+        for(var j=0;j<linePatterns.length;j++){
+            var p=linePatterns[j];
+            var match=p.regex.exec(line);
+            if(match){
+                choices.push({label:match[1],text:match[2].trim(),order:choices.length});
+                break;
+            }
+        }
+    }
+    
+    // 方案 2: 如果行首检测不到，尝试检测行内编号（如 "1. xxx 2. xxx"）
+    if(choices.length<2){
+        choices=[];
+        var fullContent=content;
+        var numPattern=/(\d+)\.\s*([^\n]+?)(?=\s*\d+\.\s*|$)/g;
+        var match;
+        while((match=numPattern.exec(fullContent))!==null){
+            if(match[2].trim().length>0 && match[2].trim().length<100){
+                choices.push({label:match[1],text:match[2].trim(),order:choices.length});
+            }
+        }
+    }
+    
+    // 方案 3: 检测纯数字行（如 "1" "2" "3" 单独成行，后面跟文字）
+    if(choices.length<2){
+        choices=[];
+        var num=1;
+        for(var i=0;i<lines.length;i++){
+            var line=lines[i].trim();
+            // 检测短行（可能是选项），长度在 2-50 字符之间
+            if(line.length>0 && line.length<50 && !line.startsWith('#') && !line.startsWith('-')){
+                // 检查是否包含数字开头
+                var numMatch=/^(\d+)\.?\s*(.*)/.exec(line);
+                if(numMatch && numMatch[2]){
+                    choices.push({label:numMatch[1],text:numMatch[2],order:choices.length});
+                }else if(line.length<30 && num<=9){
+                    // 短文本行，自动编号
+                    choices.push({label:String(num),text:line,order:choices.length});
+                    num++;
+                }
+            }
+        }
+    }
+    
+    // 至少需要 2 个选项才显示按钮
+    if(choices.length<2)return '';
+    
+    // 去重（避免重复匹配）
+    var seen={};
+    var uniqueChoices=[];
+    for(var i=0;i<choices.length;i++){
+        var key=choices[i].label+'-'+choices[i].text;
+        if(!seen[key]){
+            seen[key]=true;
+            uniqueChoices.push(choices[i]);
+        }
+    }
+    
+    if(uniqueChoices.length<2)return '';
+    
+    // 生成按钮 HTML - 使用 data 属性避免转义问题
+    var html='<div class="choice-buttons">';
+    for(var j=0;j<uniqueChoices.length;j++){
+        var choice=uniqueChoices[j];
+        html+='<button class="choice-btn" data-choice="'+choice.text.replace(/"/g,'&quot;')+'" onclick="sendChoiceBtn(this)">'+choice.label+'. '+choice.text+'</button>';
+    }
+    html+='</div>';
+    return html;
+}
+
+// 发送选择（使用 data 属性）
+function sendChoiceBtn(btn){
+    // 禁用所有选择按钮防止重复点击
+    var buttons=btn.parentElement.querySelectorAll('.choice-btn');
+    for(var i=0;i<buttons.length;i++){
+        buttons[i].disabled=true;
+        buttons[i].style.opacity='0.6';
+    }
+    // 从 data 属性获取选择内容
+    var choiceText=btn.getAttribute('data-choice');
+    // 发送选择内容
+    messageInput.value=choiceText;
+    sendMessage();
+}
+
+// 发送选择
+function sendChoice(btn,choiceText){
+    // 禁用所有选择按钮防止重复点击
+    var buttons=btn.parentElement.querySelectorAll('.choice-btn');
+    for(var i=0;i<buttons.length;i++){
+        buttons[i].disabled=true;
+        buttons[i].style.opacity='0.6';
+    }
+    // 发送选择内容
+    messageInput.value=choiceText;
+    sendMessage();
+}
+
 function addMessage(content,isUser,imageData,save){
     if(save===undefined)save=true;
     var div=document.createElement('div');
@@ -263,6 +388,11 @@ function addMessage(content,isUser,imageData,save){
     // 用户消息进行 HTML 转义后保留换行，助手消息用 marked 渲染 Markdown
     var renderedContent=isUser?escapeHtml(content).split('\n').join('<br>'):marked.parse(content);
     var html='<div class="message-avatar">'+(isUser?'👤':'🤖')+'</div><div class="message-content"><div class="message-text">'+renderedContent+'</div>';
+    // 添加选择按钮（仅助手消息）
+    var choiceButtons=renderChoiceButtons(content,isUser);
+    if(choiceButtons){
+        html+=choiceButtons;
+    }
     if(imageData)html+='<img class="message-image" src="'+imageData+'">';
     html+='</div>';
     div.innerHTML=html;
@@ -299,9 +429,15 @@ function typeMessage(content){
 }
 
 function sendMessage(){
+    // 如果正在思考中，点击按钮则停止生成
+    if(isThinking){
+        stopGeneration();
+        return;
+    }
+    
     var message=messageInput.value.trim();
     if(!message&&!currentImage&&!currentFile)return;
-    sendBtn.disabled=true;
+    
     var userMsg=message;
     var imgData=currentImage;
     if(currentImage)userMsg+=(userMsg?' [图片]':'[图片]');
@@ -324,6 +460,35 @@ function sendMessage(){
             sendStreamRequest(formData,fileToSend);
         });
     }else{sendStreamRequest(formData,fileToSend);}
+}
+
+// 停止生成
+function stopGeneration(){
+    if(currentXhr){
+        currentXhr.abort();
+        currentXhr=null;
+    }
+    isThinking=false;
+    sendBtn.innerHTML='⬆️';
+    sendBtn.title='发送';
+    sendBtn.classList.remove('thinking');
+    sendBtn.disabled=false;
+    messageInput.focus();
+    // 移除加载框
+    removeLoading();
+    // 添加停止提示
+    var lastAssistantMsg=chatMessages.querySelector('.message.assistant:last-child');
+    if(lastAssistantMsg){
+        var textDiv=lastAssistantMsg.querySelector('.message-text');
+        if(textDiv && textDiv.textContent.trim()){
+            // 已有内容，追加停止提示
+            textDiv.innerHTML=marked.parse(textDiv.textContent+'\n\n*▎已停止生成*');
+        }else if(textDiv){
+            // 还没有内容，显示停止提示
+            textDiv.innerHTML=marked.parse('*▎已停止生成*');
+        }
+    }
+    saveChatHistory();
 }
 
 // 将 dataURL 或 URL 转换为 blob
@@ -365,13 +530,16 @@ function sendStreamRequest(formData,file){
     var buffer='';
     var assistantDiv=null;
     var textDiv=null;
-    var thinkingContentDiv=null;
-    var thinkingContent='';
     var firstContent=true;
-    var startTime=Date.now();
-    var progressTimer=null;
     
+    // 创建新的 XHR 请求
     var xhr=new XMLHttpRequest();
+    currentXhr=xhr;  // 保存当前请求
+    isThinking=true;  // 标记为思考中
+    sendBtn.innerHTML='⏸️';  // 更改为暂停图标
+    sendBtn.title='停止生成';
+    sendBtn.classList.add('thinking');
+    
     xhr.open('POST','/api/chat_stream',true);
     
     var position=0;
@@ -390,52 +558,59 @@ function sendStreamRequest(formData,file){
             if(line.startsWith('data: ')){
                 var data=line.substring(6);
                 if(data==='[DONE]'){
-                    if(progressTimer) clearInterval(progressTimer);
-                    if(thinkingContentDiv){
-                        var thinkingContainer=thinkingContentDiv.closest('.thinking-container');
-                        if(thinkingContainer){
-                            removeLoading();
-                            assistantDiv=createAssistantMessage();
-                            textDiv=assistantDiv.querySelector('.message-text');
-                            textDiv.innerHTML=marked.parse(thinkingContent);
-                            chatMessages.scrollTop=chatMessages.scrollHeight;
-                            thinkingContainer.remove();
-                        }
-                    }
+                    // 请求完成，添加选择按钮
+                    isThinking=false;
+                    currentXhr=null;
+                    sendBtn.innerHTML='⬆️';
+                    sendBtn.title='发送';
+                    sendBtn.classList.remove('thinking');
                     sendBtn.disabled=false;
                     messageInput.focus();
+                    // 检测并添加选择按钮 - 使用 textDiv.textContent 获取原始内容（包含换行符）
+                    if(textDiv && assistantDiv){
+                        // 从 textContent 获取原始文本（marked 渲染前的内容）
+                        var fullContent=textDiv.textContent.trim();
+                        var existingButtons=assistantDiv.querySelector('.choice-buttons');
+                        if(!existingButtons){
+                            var choiceHtml=renderChoiceButtons(fullContent,false);
+                            if(choiceHtml){
+                                var contentDiv=assistantDiv.querySelector('.message-content');
+                                contentDiv.innerHTML+=choiceHtml;
+                            }
+                        }
+                    }
                     saveChatHistory();
                     return;
                 }
                 if(data==='') continue;
                 if(firstContent){
-                    thinkingContentDiv=document.getElementById('thinkingContent');
+                    // 第一次收到回复时，创建助手消息框
+                    removeLoading();
+                    assistantDiv=createAssistantMessage();
+                    textDiv=assistantDiv.querySelector('.message-text');
                     firstContent=false;
-                    if(progressTimer) clearInterval(progressTimer);
                 }
+                // 直接追加回复内容
                 if(data.trim()){
-                    thinkingContent+=data+'\n';
-                    if(thinkingContentDiv){
-                        thinkingContentDiv.innerHTML=marked.parse(thinkingContent);
-                        thinkingContentDiv.scrollTop=thinkingContentDiv.scrollHeight;
-                    }
+                    textDiv.textContent+=data+'\n';
+                    textDiv.innerHTML=marked.parse(textDiv.textContent);
+                    chatMessages.scrollTop=chatMessages.scrollHeight;
                 }
             }
         }
     };
     
-    // 启动进度提示定时器
-    progressTimer=setInterval(function(){
-        var elapsed=((Date.now()-startTime)/1000).toFixed(1);
-        var progressDiv=document.getElementById('thinkingContent');
-        if(progressDiv && firstContent){
-            progressDiv.innerHTML='<p style="color:#888">正在思考中... 已 '+elapsed+' 秒</p>';
-        }
-    }, 1000);
-    
     xhr.onload=function(){
         if(xhr.status!==200){
-            if(textDiv) textDiv.innerHTML=marked.parse(textDiv.textContent+'\\n\\n**[发送失败]**');
+            if(textDiv) textDiv.innerHTML=marked.parse(textDiv.textContent+'\n\n**[发送失败]**');
+        }
+        // 请求完成，重置状态（如果未被中止）
+        if(isThinking){
+            isThinking=false;
+            currentXhr=null;
+            sendBtn.innerHTML='⬆️';
+            sendBtn.title='发送';
+            sendBtn.classList.remove('thinking');
         }
         sendBtn.disabled=false;
         messageInput.focus();
@@ -443,7 +618,16 @@ function sendStreamRequest(formData,file){
     };
     
     xhr.onerror=function(){
-        if(textDiv) textDiv.innerHTML=marked.parse(textDiv.textContent+'\\n\\n**[网络错误]**');
+        // 如果是被中止的，不显示错误
+        if(xhr.statusText==='abort'){
+            return;
+        }
+        if(textDiv) textDiv.innerHTML=marked.parse(textDiv.textContent+'\n\n**[网络错误]**');
+        isThinking=false;
+        currentXhr=null;
+        sendBtn.innerHTML='⬆️';
+        sendBtn.title='发送';
+        sendBtn.classList.remove('thinking');
         sendBtn.disabled=false;
         messageInput.focus();
     };
@@ -669,6 +853,13 @@ function renderChatHistory(history){
         // 用户消息保留换行，助手消息用 marked 渲染
         var renderedContent=msg.isUser?escapeHtml(msg.content).split(NL).join('<br>'):marked.parse(msg.content);
         var html='<div class="message-avatar">'+(msg.isUser?'👤':'🤖')+'</div><div class="message-content"><div class="message-text">'+renderedContent+'</div>';
+        // 添加选择按钮（仅助手消息）
+        if(!msg.isUser){
+            var choiceButtons=renderChoiceButtons(msg.content,false);
+            if(choiceButtons){
+                html+=choiceButtons;
+            }
+        }
         if(msg.imageData)html+='<img class="message-image" src="'+msg.imageData+'">';
         html+='</div>';
         div.innerHTML=html;
@@ -789,4 +980,84 @@ function clearAllLocalStorage(){
     }catch(e){
         alert('清理失败：'+e.message);
     }
+}
+
+// 插件更新功能
+function checkForUpdates(){
+    var statusEl=document.getElementById('updateStatus');
+    var infoDiv=document.getElementById('updateInfo');
+    var outputDiv=document.getElementById('updateOutput');
+    var updateBtn=document.getElementById('updateNowBtn');
+    
+    statusEl.textContent='正在检查更新...';
+    infoDiv.style.display='none';
+    outputDiv.style.display='none';
+    updateBtn.style.display='none';
+    
+    fetch('/api/plugin/update/check')
+        .then(function(res){return res.json();})
+        .then(function(data){
+            if(data.error){
+                statusEl.textContent='❌ '+data.error;
+                return;
+            }
+            
+            infoDiv.style.display='block';
+            document.getElementById('currentVersion').textContent=data.current_version||'unknown';
+            document.getElementById('latestVersion').textContent=data.latest_version||'unknown';
+            
+            if(data.has_update){
+                statusEl.textContent='✅ 发现新版本！';
+                document.getElementById('commitsBehind').textContent='落后 '+data.commits_behind+' 个提交';
+                updateBtn.style.display='inline-block';
+            }else{
+                statusEl.textContent='✅ 已是最新版本';
+                document.getElementById('commitsBehind').textContent='';
+                updateBtn.style.display='none';
+            }
+        })
+        .catch(function(err){
+            statusEl.textContent='❌ 检查失败：'+err.message;
+            console.error('Check update error:',err);
+        });
+}
+
+function executeUpdate(){
+    var statusEl=document.getElementById('updateStatus');
+    var outputDiv=document.getElementById('updateOutput');
+    var updateBtn=document.getElementById('updateNowBtn');
+    var checkBtn=document.getElementById('checkUpdateBtn');
+    
+    if(!confirm('确定要更新插件吗？\\n\\n更新过程需要：\\n1. 拉取最新代码\\n2. 安装依赖\\n3. 建议重启服务\\n\\n继续？')){
+        return;
+    }
+    
+    statusEl.textContent='🔄 正在更新...';
+    outputDiv.style.display='block';
+    outputDiv.innerHTML='正在拉取最新代码...\\n';
+    updateBtn.disabled=true;
+    checkBtn.disabled=true;
+    
+    fetch('/api/plugin/update/execute',{method:'POST'})
+        .then(function(res){return res.json();})
+        .then(function(data){
+            if(data.success){
+                statusEl.textContent='✅ 更新成功！';
+                outputDiv.innerHTML+='<br><strong style="color:#00ff00;">'+data.message+'</strong><br><pre>'+data.output+'</pre>';
+                alert('更新成功！\\n\\n'+data.message+'\\n\\n请重启服务以应用更改。');
+            }else{
+                statusEl.textContent='❌ 更新失败';
+                outputDiv.innerHTML+='<br><strong style="color:#ff4444;">'+data.message+'</strong><br><pre>'+data.error+'</pre>';
+                alert('更新失败：'+data.message+'\\n\\n'+data.error);
+            }
+        })
+        .catch(function(err){
+            statusEl.textContent='❌ 更新失败：'+err.message;
+            outputDiv.innerHTML+='<br><strong style="color:#ff4444;">请求失败</strong><br><pre>'+err.message+'</pre>';
+            alert('更新请求失败：'+err.message);
+        })
+        .finally(function(){
+            updateBtn.disabled=false;
+            checkBtn.disabled=false;
+        });
 }

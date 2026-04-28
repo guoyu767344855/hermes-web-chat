@@ -186,15 +186,15 @@ def get_patterns_data():
     return {"hourly": hourly, "daily": dict(sorted(daily.items(), reverse=True)[:14]), "peak_hour": max(hourly.keys(), key=lambda k: hourly[k]) if any(hourly.values()) else "N/A"}
 
 def call_hermes_stream(message: str, image_path: Optional[str] = None) -> Generator[str, None, None]:
-    """流式调用 hermes，实时返回输出"""
+    """流式调用 hermes，实时返回输出（仅回复内容，不含思考过程）"""
     try:
         hermes_cmd = get_hermes_cmd()
         if not hermes_cmd:
             yield "错误：找不到 hermes 命令，请确认已正确安装\n"
             return
         
-        # 不使用 -Q 参数，实现真正的流式输出
-        cmd = [hermes_cmd, "chat", "-q", message or "你好", "--source", "web"]
+        # 使用 -q 和 -Q 参数获取纯净回复（-Q 会等待完整回复，但能过滤终端输出）
+        cmd = [hermes_cmd, "chat", "-q", message or "你好", "-Q", "--source", "web"]
         if image_path: cmd.extend(["--image", image_path])
         
         # 使用 Popen 实现流式输出
@@ -207,24 +207,16 @@ def call_hermes_stream(message: str, image_path: Optional[str] = None) -> Genera
             env={**os.environ, "HERMES_HOME": str(HERMES_HOME)}
         )
         
-        # 实时读取输出，过滤 session_id 等系统信息
+        # 实时读取输出
         has_output = False
         for line in process.stdout:
-            line = line.rstrip()  # 只去掉右侧空白
+            # 只去掉行尾换行符，保留其他空白（包括空行）
+            line = line.rstrip('\n\r')
             # 跳过 session_id 行
             if line.startswith('session_id:'):
                 continue
-            # 跳过 Query 行（用户输入）
-            if line.startswith('Query:'):
-                continue
-            # 跳过思考过程日志（Initializing agent 等）
-            if line.startswith('Initializing') or line.startswith('|'):
-                continue
-            # 跳过空行
-            if not line:
-                continue
-            # 输出行
-            yield line + '\n'
+            # 输出行（保留空行以维持格式）- 注意：SSE 协议会用 \n\n 分隔，所以这里不加 \n
+            yield line
             has_output = True
         
         # 如果没有任何输出，返回提示
@@ -243,18 +235,15 @@ def call_hermes(message: str, image_path: Optional[str] = None) -> str:
         hermes_cmd = get_hermes_cmd()
         if not hermes_cmd:
             return "错误：找不到 hermes 命令，请确认已正确安装"
+        # 使用 -q 和 -Q 参数获取纯净回复
         cmd = [hermes_cmd, "chat", "-q", message or "你好", "-Q", "--source", "web"]
         if image_path: cmd.extend(["--image", image_path])
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=300, env={**os.environ, "HERMES_HOME": str(HERMES_HOME)})
         # 过滤不需要的行，保留格式
         lines = []
         for line in (result.stdout or '').split('\n'):
-            line = line.rstrip()  # 只去掉右侧空白
+            line = line.rstrip('\n\r')  # 只去掉行尾换行符
             if line.startswith('session_id:'):
-                continue
-            if line.startswith('Query:'):
-                continue
-            if line.startswith('Initializing') or line.startswith('|'):
                 continue
             lines.append(line)  # 保留所有行（包括空行）
         # 移除开头和结尾的多余空行
@@ -363,6 +352,62 @@ async def api_projects(): return JSONResponse(content=get_projects_data())
 async def api_costs(): return JSONResponse(content=get_costs_data())
 @app.get("/api/patterns")
 async def api_patterns(): return JSONResponse(content=get_patterns_data())
+
+@app.get("/api/plugin/update/check")
+async def check_plugin_update():
+    """检查插件更新"""
+    import subprocess
+    plugin_dir = Path(__file__).parent
+    try:
+        # 检查是否是 git 仓库
+        if not (plugin_dir / ".git").exists():
+            return JSONResponse(content={"has_update": False, "current_version": "unknown", "latest_version": "unknown", "error": "非 git 仓库"})
+        
+        # 获取当前版本信息
+        result = subprocess.run(["git", "-C", str(plugin_dir), "log", "-1", "--format=%h %s"], capture_output=True, text=True, timeout=10)
+        current_version = result.stdout.strip() if result.returncode == 0 else "unknown"
+        
+        # 获取远程更新信息
+        result = subprocess.run(["git", "-C", str(plugin_dir), "fetch", "origin"], capture_output=True, text=True, timeout=30)
+        if result.returncode != 0:
+            return JSONResponse(content={"has_update": False, "current_version": current_version, "latest_version": "unknown", "error": "无法连接远程仓库"})
+        
+        # 比较本地和远程
+        result = subprocess.run(["git", "-C", str(plugin_dir), "rev-list", "HEAD..origin/main", "--count"], capture_output=True, text=True, timeout=10)
+        if result.returncode == 0:
+            ahead_count = int(result.stdout.strip())
+            if ahead_count > 0:
+                # 获取最新版本信息
+                result = subprocess.run(["git", "-C", str(plugin_dir), "log", "origin/main", "-1", "--format=%h %s"], capture_output=True, text=True, timeout=10)
+                latest_version = result.stdout.strip() if result.returncode == 0 else "unknown"
+                return JSONResponse(content={"has_update": True, "current_version": current_version, "latest_version": latest_version, "commits_behind": ahead_count})
+        
+        return JSONResponse(content={"has_update": False, "current_version": current_version, "latest_version": current_version, "commits_behind": 0})
+    except Exception as e:
+        return JSONResponse(content={"has_update": False, "error": str(e)})
+
+@app.post("/api/plugin/update/execute")
+async def execute_plugin_update():
+    """执行插件更新"""
+    import subprocess
+    plugin_dir = Path(__file__).parent
+    try:
+        # 拉取最新代码
+        result = subprocess.run(["git", "-C", str(plugin_dir), "pull", "origin", "main"], capture_output=True, text=True, timeout=60)
+        if result.returncode == 0:
+            # 尝试安装依赖
+            requirements_file = plugin_dir / "requirements.txt"
+            if requirements_file.exists():
+                venv_python = Path(HERMES_HOME) / "venvs" / "hermes-web-chat" / "bin" / "python"
+                if venv_python.exists():
+                    subprocess.run([str(venv_python), "-m", "pip", "install", "-r", str(requirements_file), "-q"], timeout=30)
+            return JSONResponse(content={"success": True, "output": result.stdout, "message": "更新成功！建议重启服务以应用更改。"})
+        else:
+            return JSONResponse(content={"success": False, "error": result.stderr, "message": "更新失败"})
+    except subprocess.TimeoutExpired:
+        return JSONResponse(content={"success": False, "error": "更新超时", "message": "更新操作超时，请检查网络连接"})
+    except Exception as e:
+        return JSONResponse(content={"success": False, "error": str(e), "message": "更新失败"})
 
 # 静态文件服务
 from fastapi.staticfiles import StaticFiles
@@ -537,13 +582,22 @@ def get_html_content():
         .message-text hr {{ border: none; border-top: 1px solid var(--border-light); margin: 20px 0; }}
         .message-text img {{ max-width: 100%; border-radius: 8px; margin: 10px 0; }}
         .message-image {{ max-width: 100%; max-height: 400px; border-radius: 10px; margin-top: 10px; border: 2px solid var(--border-light); }}
+        /* 选择按钮样式 */
+        .choice-buttons {{ display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-light); }}
+        .choice-btn {{ background: var(--accent-gradient); color: white; border: none; padding: 10px 16px; border-radius: 8px; cursor: pointer; font-size: 14px; transition: all 0.2s; box-shadow: 0 2px 8px rgba(0,217,255,0.3); }}
+        .choice-btn:hover {{ transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,217,255,0.4); }}
+        .choice-btn:active {{ transform: translateY(0); }}
         .input-container {{ padding: 20px 30px; background: var(--bg-secondary); border-top: 1px solid var(--border-color); }}
         .input-wrapper {{ display: flex; gap: 15px; align-items: flex-end; background: var(--message-bg); border: 2px solid var(--border-light); border-radius: 24px; padding: 8px 8px 8px 20px; }}
         #messageInput {{ flex: 1; background: transparent; border: none; outline: none; color: var(--text-primary); font-size: 15px; padding: 10px 0; resize: none; max-height: 150px; font-family: inherit; }}
         .input-actions {{ display: flex; gap: 8px; }}
-        .action-btn {{ width: 44px; height: 44px; border-radius: 50%; border: none; cursor: pointer; background: var(--code-bg); color: var(--text-secondary); font-size: 20px; }}
+        .action-btn {{ width: 44px; height: 44px; border-radius: 50%; border: none; cursor: pointer; background: var(--code-bg); color: var(--text-secondary); font-size: 20px; transition: all 0.2s; }}
         .action-btn:hover {{ background: var(--border-light); color: var(--accent-primary); }}
-        #sendBtn {{ background: var(--accent-gradient); color: white; }}
+        #sendBtn {{ background: var(--accent-gradient); color: white; font-size: 18px; font-weight: bold; }}
+        #sendBtn:hover {{ transform: scale(1.05); }}
+        #sendBtn:disabled {{ opacity: 0.6; cursor: not-allowed; transform: none; }}
+        #sendBtn.thinking {{ background: #ff9500; animation: pulse 1.5s ease-in-out infinite; }}
+        @keyframes pulse {{ 0%, 100% {{ opacity: 1; }} 50% {{ opacity: 0.7; }} }}
         .preview-container, .file-preview-container {{ display: none; padding: 10px 30px; background: var(--bg-secondary); border-top: 1px solid var(--border-color); }}
         .preview-container.show, .file-preview-container.show {{ display: block; }}
         .preview-image {{ max-height: 150px; border-radius: 10px; border: 2px solid var(--accent-primary); }}
@@ -720,7 +774,7 @@ def get_html_content():
                     <div class="input-actions">
                         <button class="action-btn" onclick="document.getElementById('imageInput').click()" title="上传图片">🖼️</button>
                         <button class="action-btn" onclick="document.getElementById('fileInput').click()" title="上传文件">📎</button>
-                        <button class="action-btn" id="sendBtn" onclick="sendMessage()" title="发送">📤</button>
+                        <button class="action-btn" id="sendBtn" onclick="sendMessage()" title="发送">⬆️</button>
                     </div>
                 </div>
             </div>
@@ -806,6 +860,28 @@ def get_html_content():
                                 <div class="theme-name">护眼绿</div>
                             </div>
                         </div>
+                    </div>
+                    <div class="setting-section">
+                        <div class="setting-header">
+                            <span class="setting-icon">🔄</span>
+                            <h3 class="setting-title">插件更新</h3>
+                        </div>
+                        <div class="setting-description">检查并安装 Hermes Web Chat 的最新版本。更新会自动拉取最新代码并安装依赖。</div>
+                        <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+                            <button class="refresh-btn" id="checkUpdateBtn" onclick="checkForUpdates()" style="padding: 10px 20px; font-size: 14px;">
+                                🔍 检查更新
+                            </button>
+                            <button class="refresh-btn" id="updateNowBtn" onclick="executeUpdate()" style="padding: 10px 20px; font-size: 14px; display: none; background: linear-gradient(135deg, #00d9ff 0%, #0099ff 100%); color: white;">
+                                🚀 立即更新
+                            </button>
+                            <span id="updateStatus" style="color: var(--text-secondary); font-size: 14px; margin-left: 10px;"></span>
+                        </div>
+                        <div id="updateInfo" style="margin-top: 16px; padding: 16px; background: var(--bg-secondary); border-radius: 10px; font-size: 14px; display: none;">
+                            <div style="margin-bottom: 8px;"><strong>当前版本：</strong><span id="currentVersion"></span></div>
+                            <div style="margin-bottom: 8px;"><strong>最新版本：</strong><span id="latestVersion"></span></div>
+                            <div id="commitsBehind" style="color: var(--accent-primary);"></div>
+                        </div>
+                        <div id="updateOutput" style="margin-top: 16px; padding: 16px; background: var(--pre-bg); border-radius: 10px; font-size: 13px; font-family: 'Consolas', 'Monaco', monospace; color: var(--pre-text); max-height: 300px; overflow-y: auto; display: none;"></div>
                     </div>
                     <div class="setting-section">
                         <div class="setting-header">
