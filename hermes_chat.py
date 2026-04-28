@@ -193,8 +193,8 @@ def call_hermes_stream(message: str, image_path: Optional[str] = None) -> Genera
             yield "错误：找不到 hermes 命令，请确认已正确安装\n"
             return
         
-        # 使用 -q 和 -Q 参数获取纯净回复（-Q 会等待完整回复，但能过滤终端输出）
-        cmd = [hermes_cmd, "chat", "-q", message or "你好", "-Q", "--source", "web"]
+        # 不使用 -Q 参数以获取流式输出，但需要过滤思考过程
+        cmd = [hermes_cmd, "chat", "-q", message or "你好", "--source", "web"]
         if image_path: cmd.extend(["--image", image_path])
         
         # 使用 Popen 实现流式输出
@@ -207,15 +207,33 @@ def call_hermes_stream(message: str, image_path: Optional[str] = None) -> Genera
             env={**os.environ, "HERMES_HOME": str(HERMES_HOME)}
         )
         
-        # 实时读取输出
+        # 实时读取输出，过滤思考过程
         has_output = False
+        in_thinking = False  # 标记是否在思考过程中
+        
         for line in process.stdout:
-            # 只去掉行尾换行符，保留其他空白（包括空行）
+            # 只去掉行尾换行符
             line = line.rstrip('\n\r')
+            
             # 跳过 session_id 行
             if line.startswith('session_id:'):
                 continue
-            # 输出行（保留空行以维持格式）- 注意：SSE 协议会用 \n\n 分隔，所以这里不加 \n
+            
+            # 检测思考过程开始
+            if line.startswith('Query:') or line.startswith('Initializing'):
+                in_thinking = True
+                continue
+            
+            # 过滤思考过程行（以 | 开头的行）
+            if in_thinking or line.startswith('|'):
+                continue
+            
+            # 检测思考过程结束（空行后是正式回复）
+            if in_thinking and line.strip() == '':
+                in_thinking = False
+                continue
+            
+            # 输出行
             yield line
             has_output = True
         
@@ -428,7 +446,33 @@ def get_html_content():
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
     <title>Hermes Agent</title>
+    <!-- marked.js for Markdown rendering -->
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js?v={timestamp}"></script>
+    <!-- highlight.js for syntax highlighting -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/atom-one-dark.min.css?v={timestamp}">
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/core.min.js?v={timestamp}"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/python.min.js?v={timestamp}"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/javascript.min.js?v={timestamp}"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/typescript.min.js?v={timestamp}"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/bash.min.js?v={timestamp}"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/json.min.js?v={timestamp}"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/yaml.min.js?v={timestamp}"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/sql.min.js?v={timestamp}"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/java.min.js?v={timestamp}"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/go.min.js?v={timestamp}"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/rust.min.js?v={timestamp}"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/cpp.min.js?v={timestamp}"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/c.min.js?v={timestamp}"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/csharp.min.js?v={timestamp}"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/php.min.js?v={timestamp}"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/ruby.min.js?v={timestamp}"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/swift.min.js?v={timestamp}"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/kotlin.min.js?v={timestamp}"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/shell.min.js?v={timestamp}"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/xml.min.js?v={timestamp}"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/css.min.js?v={timestamp}"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/diff.min.js?v={timestamp}"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/markdown.min.js?v={timestamp}"></script>
     <style>
         :root {{
             /* 默认主题 - 浅色 */
@@ -560,8 +604,34 @@ def get_html_content():
         .message-text p:first-child {{ margin-top: 0; }}
         .message-text p:last-child {{ margin-bottom: 0; }}
         .message-text code {{ background: var(--code-bg); padding: 2px 6px; border-radius: 4px; font-family: 'Consolas', 'Monaco', 'Courier New', monospace; font-size: 13px; color: var(--code-text); }}
-        .message-text pre {{ background: var(--pre-bg); padding: 15px; border-radius: 8px; overflow-x: auto; margin: 10px 0; border: 1px solid var(--border-light); }}
-        .message-text pre code {{ background: transparent; padding: 0; color: var(--pre-text); font-size: 13px; line-height: 1.5; }}
+        .message-text pre {{ background: var(--pre-bg); padding: 0; border-radius: 8px; overflow-x: auto; margin: 10px 0; border: 1px solid var(--border-light); }}
+        .message-text pre code {{ background: transparent; padding: 15px; color: inherit; font-size: 13px; line-height: 1.5; display: block; }}
+        /* highlight.js 高亮样式覆盖 */
+        .message-text pre code .hljs {{ background: transparent; padding: 0; }}
+        .message-text pre code .hljs-comment {{ color: #6a9955; font-style: italic; }}
+        .message-text pre code .hljs-keyword {{ color: #569cd6; font-weight: bold; }}
+        .message-text pre code .hljs-string {{ color: #ce9178; }}
+        .message-text pre code .hljs-function {{ color: #dcdcaa; }}
+        .message-text pre code .hljs-number {{ color: #b5cea8; }}
+        .message-text pre code .hljs-class {{ color: #4ec9b0; }}
+        .message-text pre code .hljs-variable {{ color: #9cdcfe; }}
+        .message-text pre code .hljs-operator {{ color: #d4d4d4; }}
+        .message-text pre code .hljs-punctuation {{ color: #d4d4d4; }}
+        /* 代码块语言标签 */
+        .message-text pre {{ position: relative; }}
+        .message-text pre::before {{ 
+            content: attr(data-language); 
+            position: absolute; 
+            top: 0; 
+            right: 0; 
+            background: rgba(255,255,255,0.1); 
+            color: #888; 
+            padding: 4px 8px; 
+            font-size: 11px; 
+            border-radius: 0 8px 0 8px;
+            text-transform: uppercase;
+            font-weight: 600;
+        }}
         .message-text ul, .message-text ol {{ margin: 10px 0; padding-left: 25px; }}
         .message-text li {{ margin: 5px 0; }}
         .message-text li::marker {{ color: var(--accent-primary); }}
@@ -582,11 +652,6 @@ def get_html_content():
         .message-text hr {{ border: none; border-top: 1px solid var(--border-light); margin: 20px 0; }}
         .message-text img {{ max-width: 100%; border-radius: 8px; margin: 10px 0; }}
         .message-image {{ max-width: 100%; max-height: 400px; border-radius: 10px; margin-top: 10px; border: 2px solid var(--border-light); }}
-        /* 选择按钮样式 */
-        .choice-buttons {{ display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-light); }}
-        .choice-btn {{ background: var(--accent-gradient); color: white; border: none; padding: 10px 16px; border-radius: 8px; cursor: pointer; font-size: 14px; transition: all 0.2s; box-shadow: 0 2px 8px rgba(0,217,255,0.3); }}
-        .choice-btn:hover {{ transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,217,255,0.4); }}
-        .choice-btn:active {{ transform: translateY(0); }}
         .input-container {{ padding: 20px 30px; background: var(--bg-secondary); border-top: 1px solid var(--border-color); }}
         .input-wrapper {{ display: flex; gap: 15px; align-items: flex-end; background: var(--message-bg); border: 2px solid var(--border-light); border-radius: 24px; padding: 8px 8px 8px 20px; }}
         #messageInput {{ flex: 1; background: transparent; border: none; outline: none; color: var(--text-primary); font-size: 15px; padding: 10px 0; resize: none; max-height: 150px; font-family: inherit; }}

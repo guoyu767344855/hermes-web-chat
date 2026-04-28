@@ -7,14 +7,39 @@ var chatMessages,messageInput,previewContainer,previewImage,filePreviewContainer
 var currentXhr=null;  // 保存当前请求，用于中止
 var isThinking=false;  // 标记是否正在思考中
 
-// Configure marked.js for better Markdown rendering
+// Configure marked.js for better Markdown rendering with syntax highlighting
 if(typeof marked!=='undefined'){
+    // Configure marked options
     marked.setOptions({
         breaks:true,           // Convert \n to <br>
         gfm:true,              // GitHub Flavored Markdown
         headerIds:true,        // Add IDs to headers
         mangle:false,          // Don't escape header IDs
-        sanitize:false         // Don't sanitize HTML (allow custom styling)
+        sanitize:false,        // Don't sanitize HTML (allow custom styling)
+        highlight: function(code, lang) {
+            // Use highlight.js for syntax highlighting
+            if(typeof hljs!=='undefined'){
+                // Try to highlight with specified language
+                if(lang && lang.trim()){
+                    try {
+                        // Check if language is registered
+                        if(hljs.getLanguage(lang)){
+                            return hljs.highlight(code, {language: lang}).value;
+                        }
+                    } catch(e) {
+                        console.warn('Highlight error for language '+lang+':', e);
+                    }
+                }
+                // Fallback to auto-detection
+                try {
+                    var result = hljs.highlightAuto(code);
+                    return result.value;
+                } catch(e) {
+                    console.warn('Highlight auto error:', e);
+                }
+            }
+            return code; // Return plain code if highlighting fails
+        }
     });
 }
 
@@ -122,13 +147,6 @@ function loadChatHistory(){
                 // 用户消息保留换行，助手消息直接使用保存的 HTML（已渲染的 Markdown）
                 var renderedContent=msg.isUser?escapeHtml(msg.content).split('\n').join('<br>'):msg.content;
                 var html='<div class="message-avatar">'+(msg.isUser?'👤':'🤖')+'</div><div class="message-content"><div class="message-text">'+renderedContent+'</div>';
-                // 添加选择按钮（仅助手消息，从原始内容检测）
-                if(!msg.isUser){
-                    var choiceButtons=renderChoiceButtons(msg.content,false);
-                    if(choiceButtons){
-                        html+=choiceButtons;
-                    }
-                }
                 if(msg.imageData)html+='<img class="message-image" src="'+msg.imageData+'">';
                 html+='</div>';
                 div.innerHTML=html;
@@ -265,91 +283,6 @@ function escapeHtml(text){
     return text.replace(/[&<>"']/g,function(m){return map[m];});
 }
 
-// 检测并渲染选择按钮
-// 支持格式：1. xxx / A) xxx / [1] xxx
-// 只有明确带编号的选项才会显示按钮
-function renderChoiceButtons(content,isUser){
-    if(isUser)return '';  // 用户消息不显示选择按钮
-    
-    var choices=[];
-    var lines=content.split('\n');
-    
-    // 方案 1: 检测每行开头的明确编号（最常用）
-    var linePatterns=[
-        {regex:/^\s*(\d+)\.\s*(.+)$/,type:'num'},      // 1. 选项
-        {regex:/^\s*([A-Za-z])\)\s*(.+)$/,type:'letter'}, // A) 选项
-        {regex:/^\s*\[(\d+)\]\s*(.+)$/,type:'bracket'}   // [1] 选项
-    ];
-    
-    for(var i=0;i<lines.length;i++){
-        var line=lines[i].trim();
-        // 跳过空行和太长的行
-        if(line.length===0 || line.length>200)continue;
-        
-        for(var j=0;j<linePatterns.length;j++){
-            var p=linePatterns[j];
-            var match=p.regex.exec(line);
-            if(match){
-                choices.push({label:match[1],text:match[2].trim(),order:choices.length});
-                break;
-            }
-        }
-    }
-    
-    // 至少需要 2 个带编号的选项才显示按钮
-    if(choices.length<2)return '';
-    
-    // 去重（避免重复匹配）
-    var seen={};
-    var uniqueChoices=[];
-    for(var i=0;i<choices.length;i++){
-        var key=choices[i].label+'-'+choices[i].text;
-        if(!seen[key]){
-            seen[key]=true;
-            uniqueChoices.push(choices[i]);
-        }
-    }
-    
-    if(uniqueChoices.length<2)return '';
-    
-    // 生成按钮 HTML - 使用 data 属性避免转义问题
-    var html='<div class="choice-buttons">';
-    for(var j=0;j<uniqueChoices.length;j++){
-        var choice=uniqueChoices[j];
-        html+='<button class="choice-btn" data-choice="'+choice.text.replace(/"/g,'&quot;')+'" onclick="sendChoiceBtn(this)">'+choice.label+'. '+choice.text+'</button>';
-    }
-    html+='</div>';
-    return html;
-}
-
-// 发送选择（使用 data 属性）
-function sendChoiceBtn(btn){
-    // 禁用所有选择按钮防止重复点击
-    var buttons=btn.parentElement.querySelectorAll('.choice-btn');
-    for(var i=0;i<buttons.length;i++){
-        buttons[i].disabled=true;
-        buttons[i].style.opacity='0.6';
-    }
-    // 从 data 属性获取选择内容
-    var choiceText=btn.getAttribute('data-choice');
-    // 发送选择内容
-    messageInput.value=choiceText;
-    sendMessage();
-}
-
-// 发送选择
-function sendChoice(btn,choiceText){
-    // 禁用所有选择按钮防止重复点击
-    var buttons=btn.parentElement.querySelectorAll('.choice-btn');
-    for(var i=0;i<buttons.length;i++){
-        buttons[i].disabled=true;
-        buttons[i].style.opacity='0.6';
-    }
-    // 发送选择内容
-    messageInput.value=choiceText;
-    sendMessage();
-}
-
 function addMessage(content,isUser,imageData,save){
     if(save===undefined)save=true;
     var div=document.createElement('div');
@@ -357,11 +290,6 @@ function addMessage(content,isUser,imageData,save){
     // 用户消息进行 HTML 转义后保留换行，助手消息用 marked 渲染 Markdown
     var renderedContent=isUser?escapeHtml(content).split('\n').join('<br>'):marked.parse(content);
     var html='<div class="message-avatar">'+(isUser?'👤':'🤖')+'</div><div class="message-content"><div class="message-text">'+renderedContent+'</div>';
-    // 添加选择按钮（仅助手消息）
-    var choiceButtons=renderChoiceButtons(content,isUser);
-    if(choiceButtons){
-        html+=choiceButtons;
-    }
     if(imageData)html+='<img class="message-image" src="'+imageData+'">';
     html+='</div>';
     div.innerHTML=html;
@@ -527,7 +455,7 @@ function sendStreamRequest(formData,file){
             if(line.startsWith('data: ')){
                 var data=line.substring(6);
                 if(data==='[DONE]'){
-                    // 请求完成，添加选择按钮
+                    // 请求完成
                     isThinking=false;
                     currentXhr=null;
                     sendBtn.innerHTML='⬆️';
@@ -535,19 +463,6 @@ function sendStreamRequest(formData,file){
                     sendBtn.classList.remove('thinking');
                     sendBtn.disabled=false;
                     messageInput.focus();
-                    // 检测并添加选择按钮 - 使用 textDiv.textContent 获取原始内容（包含换行符）
-                    if(textDiv && assistantDiv){
-                        // 从 textContent 获取原始文本（marked 渲染前的内容）
-                        var fullContent=textDiv.textContent.trim();
-                        var existingButtons=assistantDiv.querySelector('.choice-buttons');
-                        if(!existingButtons){
-                            var choiceHtml=renderChoiceButtons(fullContent,false);
-                            if(choiceHtml){
-                                var contentDiv=assistantDiv.querySelector('.message-content');
-                                contentDiv.innerHTML+=choiceHtml;
-                            }
-                        }
-                    }
                     saveChatHistory();
                     return;
                 }
@@ -822,13 +737,6 @@ function renderChatHistory(history){
         // 用户消息保留换行，助手消息用 marked 渲染
         var renderedContent=msg.isUser?escapeHtml(msg.content).split(NL).join('<br>'):marked.parse(msg.content);
         var html='<div class="message-avatar">'+(msg.isUser?'👤':'🤖')+'</div><div class="message-content"><div class="message-text">'+renderedContent+'</div>';
-        // 添加选择按钮（仅助手消息）
-        if(!msg.isUser){
-            var choiceButtons=renderChoiceButtons(msg.content,false);
-            if(choiceButtons){
-                html+=choiceButtons;
-            }
-        }
         if(msg.imageData)html+='<img class="message-image" src="'+msg.imageData+'">';
         html+='</div>';
         div.innerHTML=html;
