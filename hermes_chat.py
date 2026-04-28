@@ -193,8 +193,8 @@ def call_hermes_stream(message: str, image_path: Optional[str] = None) -> Genera
             yield "错误：找不到 hermes 命令，请确认已正确安装\n"
             return
         
-        # 不使用 -Q 参数以获取流式输出，但需要过滤思考过程
-        cmd = [hermes_cmd, "chat", "-q", message or "你好", "--source", "web"]
+        # 使用 -Q 参数获取纯净回复（过滤终端输出和思考过程）
+        cmd = [hermes_cmd, "chat", "-q", message or "你好", "-Q", "--source", "web"]
         if image_path: cmd.extend(["--image", image_path])
         
         # 使用 Popen 实现流式输出
@@ -207,30 +207,33 @@ def call_hermes_stream(message: str, image_path: Optional[str] = None) -> Genera
             env={**os.environ, "HERMES_HOME": str(HERMES_HOME)}
         )
         
-        # 实时读取输出，过滤思考过程
+        # 实时读取输出，严格过滤
         has_output = False
-        in_thinking = False  # 标记是否在思考过程中
         
         for line in process.stdout:
             # 只去掉行尾换行符
             line = line.rstrip('\n\r')
             
+            # 跳过空行
+            if not line.strip():
+                continue
+            
             # 跳过 session_id 行
             if line.startswith('session_id:'):
                 continue
             
-            # 检测思考过程开始
+            # 跳过所有系统信息行
             if line.startswith('Query:') or line.startswith('Initializing'):
-                in_thinking = True
                 continue
-            
-            # 过滤思考过程行（以 | 开头的行）
-            if in_thinking or line.startswith('|'):
+            if line.startswith('|'):  # 思考过程行
                 continue
-            
-            # 检测思考过程结束（空行后是正式回复）
-            if in_thinking and line.strip() == '':
-                in_thinking = False
+            if line.startswith('Hermes Agent'):  # 版本信息
+                continue
+            if 'upstream' in line:  # 上游信息
+                continue
+            if line.startswith('Tools:') or line.startswith('Available Skills:'):
+                continue
+            if line.startswith('===') or line.startswith('---'):
                 continue
             
             # 输出行
@@ -257,18 +260,30 @@ def call_hermes(message: str, image_path: Optional[str] = None) -> str:
         cmd = [hermes_cmd, "chat", "-q", message or "你好", "-Q", "--source", "web"]
         if image_path: cmd.extend(["--image", image_path])
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=300, env={**os.environ, "HERMES_HOME": str(HERMES_HOME)})
-        # 过滤不需要的行，保留格式
+        # 严格过滤不需要的行
         lines = []
         for line in (result.stdout or '').split('\n'):
-            line = line.rstrip('\n\r')  # 只去掉行尾换行符
+            line = line.rstrip('\n\r')
+            # 跳过空行
+            if not line.strip():
+                continue
+            # 跳过 session_id
             if line.startswith('session_id:'):
                 continue
-            lines.append(line)  # 保留所有行（包括空行）
-        # 移除开头和结尾的多余空行
-        while lines and not lines[0]:
-            lines.pop(0)
-        while lines and not lines[-1]:
-            lines.pop()
+            # 跳过系统信息
+            if line.startswith('Query:') or line.startswith('Initializing'):
+                continue
+            if line.startswith('|'):
+                continue
+            if line.startswith('Hermes Agent'):
+                continue
+            if 'upstream' in line:
+                continue
+            if line.startswith('Tools:') or line.startswith('Available Skills:'):
+                continue
+            if line.startswith('===') or line.startswith('---'):
+                continue
+            lines.append(line)
         return '\n'.join(lines) or result.stderr.strip() or "没有回复"
     except subprocess.TimeoutExpired: return "请求超时"
     except Exception as e: return f"错误：{e}"
