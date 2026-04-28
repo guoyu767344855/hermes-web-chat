@@ -266,23 +266,26 @@ function escapeHtml(text){
 }
 
 // 检测并渲染选择按钮
-// 支持格式：1. xxx 2. xxx / A) xxx B) xxx / [1] xxx [2] xxx
-// 也支持行内多个选项：1. xxx 2. xxx 3. xxx
+// 支持格式：1. xxx / A) xxx / [1] xxx
+// 只有明确带编号的选项才会显示按钮
 function renderChoiceButtons(content,isUser){
     if(isUser)return '';  // 用户消息不显示选择按钮
     
     var choices=[];
     var lines=content.split('\n');
     
-    // 方案 1: 检测每行开头的编号
+    // 方案 1: 检测每行开头的明确编号（最常用）
     var linePatterns=[
-        {regex:/^\s*(\d+)\.\s*(.+)$/,type:'num'},
-        {regex:/^\s*([A-Za-z])\)\s*(.+)$/,type:'letter'},
-        {regex:/^\s*\[(\d+)\]\s*(.+)$/,type:'bracket'}
+        {regex:/^\s*(\d+)\.\s*(.+)$/,type:'num'},      // 1. 选项
+        {regex:/^\s*([A-Za-z])\)\s*(.+)$/,type:'letter'}, // A) 选项
+        {regex:/^\s*\[(\d+)\]\s*(.+)$/,type:'bracket'}   // [1] 选项
     ];
     
     for(var i=0;i<lines.length;i++){
         var line=lines[i].trim();
+        // 跳过空行和太长的行
+        if(line.length===0 || line.length>200)continue;
+        
         for(var j=0;j<linePatterns.length;j++){
             var p=linePatterns[j];
             var match=p.regex.exec(line);
@@ -293,41 +296,7 @@ function renderChoiceButtons(content,isUser){
         }
     }
     
-    // 方案 2: 如果行首检测不到，尝试检测行内编号（如 "1. xxx 2. xxx"）
-    if(choices.length<2){
-        choices=[];
-        var fullContent=content;
-        var numPattern=/(\d+)\.\s*([^\n]+?)(?=\s*\d+\.\s*|$)/g;
-        var match;
-        while((match=numPattern.exec(fullContent))!==null){
-            if(match[2].trim().length>0 && match[2].trim().length<100){
-                choices.push({label:match[1],text:match[2].trim(),order:choices.length});
-            }
-        }
-    }
-    
-    // 方案 3: 检测纯数字行（如 "1" "2" "3" 单独成行，后面跟文字）
-    if(choices.length<2){
-        choices=[];
-        var num=1;
-        for(var i=0;i<lines.length;i++){
-            var line=lines[i].trim();
-            // 检测短行（可能是选项），长度在 2-50 字符之间
-            if(line.length>0 && line.length<50 && !line.startsWith('#') && !line.startsWith('-')){
-                // 检查是否包含数字开头
-                var numMatch=/^(\d+)\.?\s*(.*)/.exec(line);
-                if(numMatch && numMatch[2]){
-                    choices.push({label:numMatch[1],text:numMatch[2],order:choices.length});
-                }else if(line.length<30 && num<=9){
-                    // 短文本行，自动编号
-                    choices.push({label:String(num),text:line,order:choices.length});
-                    num++;
-                }
-            }
-        }
-    }
-    
-    // 至少需要 2 个选项才显示按钮
+    // 至少需要 2 个带编号的选项才显示按钮
     if(choices.length<2)return '';
     
     // 去重（避免重复匹配）
