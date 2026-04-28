@@ -6,8 +6,6 @@ var currentImage=null,currentFile=null;
 var chatMessages,messageInput,previewContainer,previewImage,filePreviewContainer,sendBtn;
 var currentXhr=null;  // 保存当前请求，用于中止
 var isThinking=false;  // 标记是否正在思考中
-var messageQueue=[];  // 消息队列
-var isProcessingQueue=false;  // 是否正在处理队列
 
 // Configure marked.js for better Markdown rendering with syntax highlighting
 if(typeof marked!=='undefined'){
@@ -86,9 +84,6 @@ function createNewSession(){
     var sessionName='session_'+now.toISOString().replace(/[:-]/g,'').split('.')[0].replace('T','_');
     CURRENT_SESSION=sessionName;
     chatMessages.innerHTML='';
-    // 清空队列
-    messageQueue=[];
-    renderQueue();
     addMessage('✨ 新会话已创建！有什么可以帮你的吗？',false,null,false);
     updateSessionTitle();
 }
@@ -125,7 +120,17 @@ function setupInput(){
             }
         }
     });
-    messageInput.addEventListener('keydown',function(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMessage();}});
+    messageInput.addEventListener('keydown',function(e){
+        if(e.key==='Enter'&&!e.shiftKey){
+            // 如果正在思考中，不发送消息
+            if(isThinking){
+                e.preventDefault();
+                return;
+            }
+            e.preventDefault();
+            sendMessage();
+        }
+    });
     document.getElementById('imageInput').addEventListener('change',handleImageSelect);
     document.getElementById('fileInput').addEventListener('change',handleFileSelect);
 }
@@ -340,16 +345,6 @@ function sendMessage(){
     var message=messageInput.value.trim();
     if(!message&&!currentImage&&!currentFile)return;
     
-    // 如果正在思考中，将消息加入队列
-    if(isThinking){
-        addToQueue(message, currentImage, currentFile);
-        messageInput.value='';
-        messageInput.style.height='auto';
-        removeImage();
-        removeFile();
-        return;
-    }
-    
     var userMsg=message;
     var imgData=currentImage;
     if(currentImage)userMsg+=(userMsg?' [图片]':'[图片]');
@@ -374,74 +369,7 @@ function sendMessage(){
     }else{sendStreamRequest(formData,fileToSend);}
 }
 
-// 添加到队列
-function addToQueue(message, image, file){
-    messageQueue.push({
-        message: message,
-        image: image,
-        file: file,
-        timestamp: Date.now()
-    });
-    renderQueue();
-}
-
-// 渲染队列
-function renderQueue(){
-    var container=document.getElementById('messageQueueContainer');
-    if(messageQueue.length===0){
-        container.style.display='none';
-        container.innerHTML='';
-        return;
-    }
-    
-    container.style.display='block';
-    var html='';
-    for(var i=0;i<messageQueue.length;i++){
-        var item=messageQueue[i];
-        var preview=item.message.substring(0,50)+(item.message.length>50?'...':'');
-        if(item.image)preview+=' [图片]';
-        if(item.file)preview+=' [文件]';
-        html+='<div class="message-queue-item">';
-        html+='<span class="message-queue-count">'+(i+1)+'</span>';
-        html+='<span class="message-queue-text">'+escapeHtml(preview)+'</span>';
-        html+='</div>';
-    }
-    container.innerHTML=html;
-}
-
-// 处理队列
-function processQueue(){
-    if(isProcessingQueue||messageQueue.length===0)return;
-    
-    isProcessingQueue=true;
-    var item=messageQueue.shift();
-    renderQueue();
-    
-    // 显示用户消息
-    var userMsg=item.message;
-    var imgData=item.image;
-    if(imgData)userMsg+=(userMsg?' [图片]':'[图片]');
-    if(item.file)userMsg+=(userMsg?' [文件:'+item.file.name+']':'[文件:'+item.file.name+']');
-    addMessage(userMsg,true,imgData);
-    
-    // 发送请求
-    var formData=new FormData();
-    formData.append('message',item.message||'请分析');
-    
-    if(imgData){
-        dataURLtoBlob(imgData).then(function(blob){
-            formData.append('image',blob,'image.png');
-            sendStreamRequest(formData,item.file);
-        }).catch(function(err){
-            console.error('Convert image error:',err);
-            sendStreamRequest(formData,item.file);
-        });
-    }else{
-        sendStreamRequest(formData,item.file);
-    }
-}
-
-// 停止生成
+// 将 dataURL 或 URL 转换为 blob
 function stopGeneration(){
     if(currentXhr){
         currentXhr.abort();
@@ -468,8 +396,6 @@ function stopGeneration(){
         }
     }
     saveChatHistory();
-    // 处理队列中的下一条消息
-    setTimeout(processQueue, 500);
 }
 
 // 将 dataURL 或 URL 转换为 blob
@@ -548,8 +474,6 @@ function sendStreamRequest(formData,file){
                     sendBtn.disabled=false;
                     messageInput.focus();
                     saveChatHistory();
-                    // 处理队列中的下一条消息
-                    setTimeout(processQueue, 500);
                     return;
                 }
                 if(data==='') continue;
@@ -585,8 +509,6 @@ function sendStreamRequest(formData,file){
         sendBtn.disabled=false;
         messageInput.focus();
         saveChatHistory();
-        // 处理队列中的下一条消息
-        setTimeout(processQueue, 500);
     };
     
     xhr.onerror=function(){

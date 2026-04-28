@@ -678,41 +678,6 @@ def get_html_content():
         #sendBtn:disabled {{ opacity: 0.6; cursor: not-allowed; transform: none; }}
         #sendBtn.thinking {{ background: #ff9500; animation: pulse 1.5s ease-in-out infinite; }}
         @keyframes pulse {{ 0%, 100% {{ opacity: 1; }} 50% {{ opacity: 0.7; }} }}
-        /* 消息队列样式 */
-        .message-queue-container {{ 
-            padding: 15px 30px; 
-            background: var(--bg-secondary); 
-            border-top: 1px solid var(--border-color);
-            max-height: 200px;
-            overflow-y: auto;
-        }}
-        .message-queue-item {{ 
-            background: var(--code-bg); 
-            padding: 10px 15px; 
-            border-radius: 8px; 
-            margin-bottom: 8px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            border-left: 3px solid var(--accent-primary);
-        }}
-        .message-queue-item:last-child {{ margin-bottom: 0; }}
-        .message-queue-text {{ 
-            flex: 1; 
-            color: var(--text-secondary);
-            font-size: 14px;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-        }}
-        .message-queue-count {{ 
-            background: var(--accent-primary); 
-            color: white; 
-            font-size: 11px; 
-            padding: 2px 8px; 
-            border-radius: 10px;
-            font-weight: 600;
-        }}
         .preview-container, .file-preview-container {{ display: none; padding: 10px 30px; background: var(--bg-secondary); border-top: 1px solid var(--border-color); }}
         .preview-container.show, .file-preview-container.show {{ display: block; }}
         .preview-image {{ max-height: 150px; border-radius: 10px; border: 2px solid var(--accent-primary); }}
@@ -881,8 +846,6 @@ def get_html_content():
             <div class="chat-messages" id="chatMessages"></div>
             <div class="preview-container" id="previewContainer"><img class="preview-image" id="previewImage" src=""><button class="preview-remove" onclick="removeImage()">X</button></div>
             <div class="file-preview-container" id="filePreviewContainer"><div style="display:flex;align-items:center;gap:10px;"><span id="filePreviewIcon" style="font-size:24px;"></span><div><div id="filePreviewName" style="color:#e8e8e8;font-size:14px;"></div><div id="filePreviewSize" style="color:#666;font-size:12px;"></div></div><button class="file-preview-remove" onclick="removeFile()">X</button></div></div>
-            <!-- 消息队列容器 -->
-            <div class="message-queue-container" id="messageQueueContainer" style="display:none;"></div>
             <div class="input-container">
                 <div class="input-wrapper">
                     <textarea id="messageInput" placeholder="输入消息... (支持粘贴图片 Ctrl+V/Cmd+V)" rows="1"></textarea>
