@@ -1,144 +1,103 @@
 # 💬 Hermes Web Chat
 
-Hermes Agent 的现代化 Web 聊天界面插件，支持多会话管理、主题切换、Markdown 渲染、文件上传等功能。
+Hermes Agent 的现代化 Web 聊天界面，支持图片粘贴、多会话管理、主题切换等功能。
 
 ![Hermes Web Chat](assets/screenshot.png)
 
-## ✨ 功能特点
-
-### 💬 聊天对话
-- 📋 **左侧导航菜单** - 仿 hermes-hudui 风格的垂直菜单
-- 📎 **剪贴板粘贴** - 直接在输入框按 `Ctrl+V` / `Cmd+V` 粘贴图片
-- 🖼️ **图片上传** - 点击按钮上传图片，支持预览和删除
-- 📁 **文件上传** - 支持上传任意类型文件（PDF、Word、Excel 等），自动读取文本内容
-- 📌 **固定底部** - 输入框始终固定在聊天页面底部
-- 💬 **多会话管理** - 创建/切换会话，每个会话独立保存聊天记录
-- ✏️ **右键编辑** - 右键点击用户消息可重新编辑发送
-- ⌨️ **Markdown 渲染** - 支持代码高亮、表格、列表、引用等 Markdown 格式
-- 🖥️ **跨平台支持** - Windows / Mac / Linux 全平台兼容
-
-### 🎨 主题系统
-- 🌌 **深空蓝** - 默认深色主题，科技感和护眼
-- ⚪ **纯白** - 明亮简洁的浅色主题
-- 🌑 **纯黑** - OLED 屏幕优化的纯黑主题
-- 🌿 **护眼绿** - 绿色调护眼主题
-- 💾 **本地保存** - 主题偏好自动保存到 localStorage
-
-### 🚀 交互体验
-- ⚡ **流式响应** - 实时显示 Hermes 思考过程，无需等待完整回复
-- 🎯 **打字机效果** - 回复内容逐字显示，流畅自然
-- 💫 **动态加载动画** - 三个跳动的圆点，实时反馈等待状态
-- 📱 **响应式布局** - 自适应不同屏幕尺寸
-- 🔄 **自动滚动** - 新消息自动滚动到可见区域
-
-### 📊 数据管理
-- 🧠 **记忆管理** - 查看和管理 Hermes 长期记忆和每日记忆，支持日期筛选
-- 📚 **技能列表** - 查看所有已安装的技能，按分类分组显示
-- 📋 **会话历史** - 浏览历史对话记录，支持日期筛选和消息加载
-- ⏰ **定时任务** - 管理 Cron 任务
-- 📊 **项目跟踪** - 查看项目状态
-- 💰 **费用统计** - Token 使用统计和费用估算
-- 📈 **使用模式** - 24 小时和每日使用分析
-
 ## 🚀 快速开始
 
-### 方法一：通过 Hermes 插件系统安装
+### 一键安装（推荐）
 
+**Mac / Linux:**
 ```bash
-hermes plugins install guoyu767344855/hermes-web-chat
+curl -fsSL https://raw.githubusercontent.com/guoyu767344855/hermes-web-chat/main/install.sh | bash
 ```
 
-### 方法二：手动安装
-
-**Mac/Linux:**
-```bash
-# 克隆仓库
-git clone https://github.com/guoyu767344855/hermes-web-chat.git ~/.hermes/plugins/hermes-web-chat
-
-# 安装依赖
-pip install fastapi uvicorn python-multipart
-
-# 启动
-python3 ~/.hermes/plugins/hermes-web-chat/hermes_chat.py
-```
-
-**Windows:**
+**Windows PowerShell:**
 ```powershell
-# 克隆仓库
-git clone https://github.com/guoyu767344855/hermes-web-chat.git $HOME\.hermes\plugins\hermes-web-chat
-
-# 安装依赖
-pip install fastapi uvicorn python-multipart
-
-# 启动
-python $HOME\.hermes\plugins\hermes-web-chat\hermes_chat.py
+irm https://raw.githubusercontent.com/guoyu767344855/hermes-web-chat/main/install.ps1 | iex
 ```
 
-### 方法三：使用安装脚本
+### 启动服务
 
-**Mac/Linux:**
+安装完成后，使用以下命令启动：
+
 ```bash
-cd hermes-web-chat
-./install.sh
+hermes-web-chat
 ```
 
-**Windows:**
-```powershell
-cd hermes-web-chat
-.\install.bat
-```
+**访问地址：** http://localhost:8888
 
-## 📖 使用说明
+---
 
-### 启动插件
+## ✨ 功能特点
 
-**Mac/Linux:**
-```bash
-# 默认端口 8888
-python3 ~/.hermes/plugins/hermes-web-chat/hermes_chat.py
-
-# 自定义端口
-python3 ~/.hermes/plugins/hermes-web-chat/hermes_chat.py 9000
-```
-
-**Windows:**
-```powershell
-# 默认端口 8888
-python $HOME\.hermes\plugins\hermes-web-chat\hermes_chat.py
-
-# 自定义端口
-python $HOME\.hermes\plugins\hermes-web-chat\hermes_chat.py 9000
-```
-
-### 访问界面
-
-在浏览器中打开：**http://localhost:8888**
-
-### 功能操作
-
-| 操作 | 说明 |
+| 功能 | 说明 |
 |------|------|
-| `Enter` | 发送消息 |
-| `Shift+Enter` | 换行 |
-| `Ctrl+V` / `Cmd+V` | 粘贴图片 |
-| 📎 按钮 | 点击上传图片 |
-| 📤 按钮 | 发送消息 |
-| 右键点击消息 | 重新编辑用户消息 |
-| 点击主题卡片 | 切换界面主题 |
+| 💬 **聊天对话** | 流式响应，实时显示 AI 回复 |
+| 📎 **图片粘贴** | Ctrl+V / Cmd+V 直接粘贴图片 |
+| 📁 **文件上传** | 支持上传任意文件，自动读取文本内容 |
+| 🎨 **主题切换** | 4 种主题（深空蓝/纯白/纯黑/护眼绿） |
+| 📋 **多会话** | 创建/切换会话，独立保存聊天记录 |
+| 🧠 **记忆管理** | 查看和管理 Hermes 长期记忆 |
+| 📚 **技能列表** | 查看所有已安装的技能 |
+| ⏰ **定时任务** | 管理 Cron 任务 |
 
-## 📋 菜单功能
+---
 
-左侧菜单包含以下功能入口：
+## 📖 使用方法
 
-- 💬 聊天对话 - 主聊天界面，支持多会话管理、主题切换
-- 📋 会话历史 - 查看历史对话，支持日期筛选和消息加载
-- 🧠 记忆管理 - 查看和管理 Hermes 记忆，支持日期筛选
-- 📚 技能列表 - 查看已安装技能，按分类分组显示
-- ⏰ 定时任务 - 管理 Cron 任务
-- 📊 项目跟踪 - 项目状态
-- 💰 费用统计 - Token 使用统计
-- 📈 使用模式 - 使用分析
-- ⚙️ 设置 - 主题切换设置
+### 启动/停止
+
+```bash
+# 启动
+hermes-web-chat
+
+# 自定义端口
+hermes-web-chat --port 9000
+
+# 停止
+pkill -f hermes_chat.py
+
+# 查看状态
+lsof -i :8888
+```
+
+### 使用管理脚本
+
+```bash
+cd ~/.Hermes/plugins/hermes-web-chat
+
+# 启动
+./scripts/start.sh
+
+# 停止
+./scripts/stop.sh
+
+# 查看状态
+./scripts/status.sh
+
+# 查看日志
+./scripts/logs.sh
+```
+
+### Hermes 插件命令
+
+```bash
+# 启动
+hermes web-chat start
+
+# 停止
+hermes web-chat stop
+
+# 查看状态
+hermes web-chat status
+
+# 查看日志
+hermes web-chat logs
+```
+
+---
 
 ## 🔧 配置
 
@@ -149,209 +108,136 @@ python $HOME\.hermes\plugins\hermes-web-chat\hermes_chat.py 9000
 | `HERMES_HOME` | `~/.Hermes` | Hermes 配置目录 |
 | `PORT` | `8888` | 服务端口 |
 
-### 依赖要求
+### 开机自启
 
-- Python 3.9+
-- FastAPI
-- Uvicorn
-- Python-multipart
-- Hermes Agent
-
-## 📁 项目结构
-
+**macOS:**
+```bash
+cd ~/.Hermes/plugins/hermes-web-chat/launchd
+./setup.sh
 ```
-hermes-web-chat/
-├── hermes_chat.py      # 主程序
-├── plugin.yaml         # 插件配置
-├── install.sh          # 安装脚本
-├── README.md           # 说明文档
-├── .gitignore          # Git 忽略文件
-└── assets/             # 资源文件
-    └── screenshot.png  # 截图
+
+**Linux:**
+```bash
+cd ~/.Hermes/plugins/hermes-web-chat/systemd
+./setup.sh
 ```
+
+---
 
 ## 🛠️ 开发
 
 ### 本地开发
 
 ```bash
+# 克隆仓库
+git clone https://github.com/guoyu767344855/hermes-web-chat.git
+cd hermes-web-chat
+
+# 创建虚拟环境
+python3 -m venv venv
+source venv/bin/activate  # Mac/Linux
+# 或
+.\venv\Scripts\activate  # Windows
+
 # 安装依赖
-pip install fastapi uvicorn python-multipart
+pip install -r requirements.txt
 
 # 运行
-python3 hermes_chat.py
-
-# 开发模式（自动重载）
-uvicorn hermes_chat:app --reload --port 8888
+python hermes_chat.py
 ```
 
-### 修改端口
+### 项目结构
 
-编辑 `hermes_chat.py` 底部的端口配置，或通过命令行参数指定：
+```
+hermes-web-chat/
+├── hermes_chat.py         # 主程序
+├── plugin.yaml            # Hermes 插件配置
+├── requirements.txt       # Python 依赖
+├── install.sh             # Mac/Linux 安装脚本
+├── install.ps1            # Windows 安装脚本
+├── README.md              # 说明文档
+├── scripts/               # 管理脚本
+│   ├── start.sh
+│   ├── stop.sh
+│   ├── status.sh
+│   └── logs.sh
+├── systemd/               # Linux systemd 配置
+│   ├── hermes-web-chat.service
+│   └── setup.sh
+├── launchd/               # macOS launchd 配置
+│   ├── com.hermes.webchat.plist
+│   └── setup.sh
+└── assets/                # 资源文件
+    └── screenshot.png
+```
+
+---
+
+## 🐛 故障排查
+
+### 端口已被占用
 
 ```bash
-python3 hermes_chat.py 9000
+# 查找占用端口的进程
+lsof -i :8888
+
+# 杀死进程
+kill -9 <PID>
+
+# 或使用其他端口
+hermes-web-chat --port 9000
 ```
+
+### 找不到 hermes 命令
+
+```bash
+# 安装 Hermes Agent
+pip install hermes-agent
+
+# 或添加到 PATH
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+### 虚拟环境不存在
+
+```bash
+# 重新运行安装脚本
+./install.sh
+```
+
+### 查看日志
+
+```bash
+# 查看最近 50 行
+tail -50 ~/.Hermes/web-chat.log
+
+# 实时跟踪
+tail -f ~/.Hermes/web-chat.log
+```
+
+---
 
 ## 📝 更新日志
 
+### v2.0.0 (2026-04-28)
+
+**🎉 重大更新**
+- 新增一键安装脚本（Mac/Linux/Windows）
+- 新增虚拟环境管理
+- 新增全局启动命令 `hermes-web-chat`
+- 新增开机自启支持（systemd/launchd）
+- 新增管理脚本（start/stop/status/logs）
+- 增强 plugin.yaml 配置
+
 ### v1.10.0 (2026-04-21)
-
-**✨ 新功能**
-- 添加主题切换系统，支持 4 种主题（深空蓝、纯白、纯黑、护眼绿）
-- 主题偏好自动保存到 localStorage
-- 设置页面主题选择器，卡片式预览
-
-**🎨 UI 优化**
-- 使用 CSS 变量实现主题切换
-- 所有颜色统一使用 `var(--variable-name)`
-- 主题卡片显示激活状态
-
-**🔧 技术改进**
-- `switchTheme()` 函数处理主题切换
-- `loadTheme()` 函数初始化主题
-- 完整的 CSS 变量系统
-
-### v1.9.1 (2026-04-16)
-
-**🐛 Bug 修复**
-- 修复等待回复时没有显示打字动画（三个点）
-- 修复中文回复内容出现乱码问题
-
-**🔧 技术改进**
-- 流式响应改为按数据块追加，避免逐字破坏多字节中文字符
-- 先显示加载动画，收到数据后再创建消息框
+- 添加主题切换系统
+- 支持 4 种主题
 
 ### v1.9.0 (2026-04-16)
+- 添加流式响应支持
+- 实时显示 AI 回复
 
-**✨ 新功能**
-- 添加流式响应支持，实时显示 Hermes 思考过程
-- 像终端聊天一样实时看到 AI 回复
-- 不再需要等待完整回复
-
-**🔧 技术实现**
-- 新增 `/api/chat_stream` 流式聊天接口
-- 后端使用 Generator 逐行输出
-- 前端使用 XHR 接收 Server-Sent Events
-- 自动滚动到最新消息
-
-### v1.8.0 (2026-04-16)
-
-**🐛 Bug 修复**
-- 修复上传的文件内容无法被识别的问题
-- 修复 `hermes` 命令路径问题（使用完整路径）
-
-**✨ 新功能**
-- 文本文件：读取内容并附加到消息中（限制 10000 字符）
-- 二进制文件：提示文件类型并保存路径
-
-**🔧 技术改进**
-- `call_hermes()` 使用跨平台路径查找
-- 自动检测文件类型（UTF-8 文本或二进制）
-- 添加详细的调试日志
-
-### v1.7.0 (2026-04-16)
-
-**🐛 Bug 修复**
-- 修复粘贴图片（base64 dataURL）无法上传的问题
-- `fetch()` 无法直接处理 `data:` 开头的 base64 URL
-
-**✨ 新功能**
-- 添加 `dataURLtoBlob()` 函数
-- 支持 base64 dataURL 和 HTTP URL 两种格式
-
-**🔧 技术实现**
-- 检测 dataURL 是否以 `'data:'` 开头
-- base64 格式：使用 `atob()` 解码，创建 `Uint8Array`
-- HTTP URL：使用 `fetch()` 获取 blob
-
-### v1.6.0 (2026-04-16)
-
-**🐛 Bug 修复**
-- 修复图片上传后未被识别的问题
-- 修复 `sendMessage` 函数中 `currentImage` 被提前清除的问题
-
-**🔧 技术改进**
-- 保存 `imageToSend` 变量避免闭包问题
-- 添加图片加载错误处理
-- 添加后端图片接收调试日志
-
-### v1.5.0 (2026-04-16)
-
-**🎨 UI 优化**
-- 将时间筛选器移到刷新按钮后面，水平排列
-- `.page-header h2` 使用 flex 布局，`gap: 12px`
-- `.filter-bar` 改为 `inline-flex`，移除 `margin-left`
-- `.refresh-btn` 添加 `font-size: 13px` 统一大小
-
-### v1.4.0 (2026-04-16)
-
-**🐛 Bug 修复**
-- 修复会话框出现左右滚动条问题
-- 修复技能列表显示为空问题
-
-**🎨 CSS 优化**
-- `.chat-messages` 添加 `overflow-x: hidden`
-- `.message-avatar` 添加 `flex-shrink: 0` 防止压缩
-- `.message-content` 和 `.message-text` 添加 `overflow-wrap: break-word`
-- `.message-image` 改为 `max-width: 100%`, `max-height: 400px`
-- 所有文本内容支持自动换行，适应不同屏幕宽度
-
-### v1.3.0 (2026-04-16)
-
-**🐛 Bug 修复**
-- 修复点击会话历史中的会话后无法显示消息记录的问题
-
-**✨ 新功能**
-- 添加 `/api/session_detail` API 端点
-- 从服务器加载历史会话的完整消息
-- 加载后自动缓存到 localStorage
-
-**🔧 技术实现**
-- `get_session_detail()` 函数读取会话 JSON 文件
-- `loadSessionDetail()` 优先从 localStorage 加载，不存在则从服务器加载
-- `renderChatHistory()` 统一渲染消息历史
-
-### v1.2.0 (2026-04-16)
-
-**✨ 新功能**
-- 会话历史页面添加日期筛选（全部时间/最近 7 天/30 天/90 天）
-- 记忆管理页面添加日期筛选（全部时间/最近 7 天/30 天/90 天）
-- 筛选器位于页面标题栏右侧，与刷新按钮并排
-
-**🔧 技术实现**
-- 存储原始数据用于前端筛选
-- 按日期字段过滤会话和记忆数据
-- 空数据状态友好提示
-
-### v1.1.0 (2026-04-16)
-
-**🐛 Bug 修复**
-- 修复左侧选项卡点击无反应问题（JavaScript 语法错误 - 引号转义问题）
-- 修复技能列表显示为空问题（表格解析逻辑优化）
-
-**✨ 功能优化**
-- 新增/清空按钮移至聊天页面标题栏右上角，布局更合理
-- 技能列表按分类分组显示，支持本地技能标识
-- 优化页面加载和交互体验
-
-**🔧 技术改进**
-- 使用 data-属性 + 动态事件绑定替代内联 onclick
-- 优化表格数据解析逻辑，正确解析 4 列格式（Name|Category|Source|Trust）
-
-### v1.0.0 (2026-04-15)
-
-- ✨ 初始版本发布
-- 💬 完整的聊天对话功能
-- 📎 剪贴板图片粘贴支持
-- 🎨 现代化 UI 设计
-- 📋 左侧导航菜单
-
-## 🛡️ 安全性
-
-- XSS 防护：用户输入自动 HTML 转义
-- 文件上传限制：文本文件最大 10000 字符
-- 本地存储：所有数据保存在本地，不上传外部服务器
+---
 
 ## 🤝 贡献
 
@@ -369,5 +255,4 @@ MIT License
 ## 🔗 相关链接
 
 - [Hermes Agent](https://github.com/nousresearch/hermes-agent)
-- [Hermes HUD UI](https://github.com/joeynyc/hermes-hudui)
 - [FastAPI](https://fastapi.tiangolo.com/)

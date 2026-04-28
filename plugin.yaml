@@ -1,27 +1,41 @@
 name: hermes-web-chat
-version: 1.0.0
-description: Hermes Agent Web Chat - 支持图片粘贴的现代化聊天界面
+version: 2.0.0
+description: Hermes Agent Web Chat - 现代化聊天界面，支持图片粘贴、多会话管理、主题切换
 author: 郭昱 <guoyu@qtshe.com>
-homepage: https://github.com/guoyu/hermes-web-chat
+homepage: https://github.com/guoyu767344855/hermes-web-chat
 
 # 插件类型
 type: web-app
 
-# 启动命令
+# 安装配置
+install:
+  script: install.sh
+  python_version: ">=3.9"
+  dependencies:
+    - fastapi>=0.104.0
+    - uvicorn>=0.24.0
+    - python-multipart>=0.0.6
+    - httpx>=0.25.0
+
+# 启动配置
 command: python3 {plugin_dir}/hermes_chat.py
-
-# 依赖
-dependencies:
-  - fastapi
-  - uvicorn
-  - python-multipart
-
-# 端口配置
 port: 8888
+
+# 后台运行配置
+background: true
+restart: on-failure
+max_restarts: 3
+
+# 健康检查
+healthcheck:
+  endpoint: http://localhost:{port}
+  interval: 30s
+  timeout: 5s
 
 # 环境变量
 env:
   HERMES_HOME: ~/.Hermes
+  PORT: 8888
 
 # 图标
 icon: 💬
@@ -31,3 +45,45 @@ tags:
   - chat
   - web-ui
   - image-upload
+  - multi-session
+  - theme-switch
+
+# 提供的 CLI 命令
+commands:
+  - name: web-chat start
+    description: 启动 Web Chat 服务
+    command: python3 {plugin_dir}/hermes_chat.py
+  - name: web-chat stop
+    description: 停止 Web Chat 服务
+    command: pkill -f "hermes_chat.py"
+  - name: web-chat status
+    description: 查看 Web Chat 服务状态
+    command: lsof -i :8888 || echo "服务未运行"
+  - name: web-chat logs
+    description: 查看 Web Chat 日志
+    command: tail -f ~/.Hermes/web-chat.log
+
+# 依赖检查
+requirements:
+  - name: hermes-agent
+    command: hermes --version
+    install_hint: pip install hermes-agent
+
+# 配置文件
+config_files:
+  - path: ~/.Hermes/web-chat/config.json
+    template: config.json.template
+    required: false
+
+# 数据目录
+data_dirs:
+  - ~/.Hermes/web-chat/uploads
+  - ~/.Hermes/sessions
+  - ~/.Hermes/memories
+
+# 日志配置
+logging:
+  file: ~/.Hermes/web-chat.log
+  level: INFO
+  max_size: 10MB
+  backup_count: 3

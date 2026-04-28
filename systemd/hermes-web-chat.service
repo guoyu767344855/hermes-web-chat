@@ -1,0 +1,25 @@
+[Unit]
+Description=Hermes Web Chat Service
+Documentation=https://github.com/guoyu767344855/hermes-web-chat
+After=network.target
+
+[Service]
+Type=simple
+User=%i
+Environment=HERMES_HOME=/home/%i/.Hermes
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+ExecStart=/home/%i/.Hermes/venvs/hermes-web-chat/bin/python /home/%i/.Hermes/plugins/hermes-web-chat/hermes_chat.py
+Restart=on-failure
+RestartSec=5
+StandardOutput=append:/home/%i/.Hermes/web-chat.log
+StandardError=append:/home/%i/.Hermes/web-chat-error.log
+
+# 安全设置
+NoNewPrivileges=true
+PrivateTmp=true
+
+# 资源限制
+LimitNOFILE=65535
+
+[Install]
+WantedBy=default.target
