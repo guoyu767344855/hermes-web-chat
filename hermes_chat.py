@@ -4,17 +4,54 @@ Hermes Agent Web Chat - 跨平台版本 (Windows/Mac/Linux)
 from fastapi import FastAPI, Form, UploadFile, File
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from pathlib import Path
-import subprocess, tempfile, os, json, glob, sys, shutil, platform
+import subprocess, tempfile, os, json, glob, sys, shutil, platform, time
 from typing import Optional, Generator
 import uvicorn
 from datetime import datetime
 import base64
 import httpx
+import asyncio
+import logging
+
+# ── 日志配置 ──
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s [%(levelname)s] %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S',
+)
+logger = logging.getLogger(__name__)
+
+# ── 配置文件支持 ──
+CONFIG_FILE = Path(__file__).parent / "hermes_chat_config.json"
+DEFAULT_CONFIG = {
+    "port": 8888,
+    "max_file_size": 10 * 1024 * 1024,  # 10MB
+    "allowed_origins": ["*"],
+}
+
+def load_config() -> dict:
+    """加载配置文件，不存在则使用默认值"""
+    config = DEFAULT_CONFIG.copy()
+    if CONFIG_FILE.exists():
+        try:
+            with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
+                user_config = json.load(f)
+            config.update(user_config)
+            logger.info("已加载配置文件: %s", CONFIG_FILE)
+        except Exception as e:
+            logger.warning("配置文件加载失败 (%s)，使用默认值", e)
+    return config
+
+CONFIG = load_config()
+MAX_FILE_SIZE = CONFIG.get("max_file_size", 10 * 1024 * 1024)
+
+# ── 启动时间 (用于健康检查) ──
+START_TIME = time.time()
 
 app = FastAPI()
 
 # TikHub API 配置（备用）
-# TIKHUB_API_KEY = "qbUzWvgW0neLvmnJEtiKzjPrOSSSd6Rs0QvklU6YZM63pGaGIXbGWDi2AQ=="
+# TIKHUB_API_KEY="qbUzWv...AQ=="
 # TIKHUB_API_URL = "https://api.tikhub.io/v1/chat/completions"
 
 
@@ -82,7 +119,7 @@ def get_skills_data():
                     skills.append({"name": parts[0], "category": parts[1] if parts[1] else "builtin", "source": parts[2], "trust": parts[3]})
         return {"skills": skills, "count": len(skills)}
     except Exception as e:
-        print(f"Skills error: {e}")
+        logger.error("Skills error: %s", e)
         return {"skills": [], "count": 0}
 
 def get_sessions_data():
@@ -158,17 +195,54 @@ def get_projects_data():
     return {"projects": projects or ["暂无项目数据"], "count": len(projects)}
 
 def get_costs_data():
+    """费用统计 - 优先使用 session JSON 中的 usage 字段"""
     sessions_dir = HERMES_HOME / "sessions"
-    total_tokens, model_counts = 0, {}
+    total_tokens = 0
+    model_counts = {}
+    has_real_usage = False
+    total_input_tokens = 0
+    total_output_tokens = 0
+
     if sessions_dir.exists():
         for fp in glob.glob(str(sessions_dir / "*.json")):
             try:
-                with open(fp, 'r', encoding='utf-8') as f: data = json.load(f)
+                with open(fp, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
                 model = data.get("model", "unknown")
                 model_counts[model] = model_counts.get(model, 0) + 1
-                total_tokens += sum(len(m.get("content",""))//4 for m in data.get("messages",[]))
-            except: continue
-    return {"total_tokens": total_tokens, "sessions": sum(model_counts.values()), "models": model_counts, "estimated_cost": f"${total_tokens/1000000*2:.2f}"}
+
+                # 尝试读取真实 usage 数据
+                usage = data.get("usage")
+                if usage and isinstance(usage, dict):
+                    has_real_usage = True
+                    total_input_tokens += usage.get("prompt_tokens", 0) or usage.get("input_tokens", 0)
+                    total_output_tokens += usage.get("completion_tokens", 0) or usage.get("output_tokens", 0)
+                    total_tokens += usage.get("total_tokens", 0)
+                else:
+                    # 回退：基于字符数估算
+                    for m in data.get("messages", []):
+                        total_tokens += len(m.get("content", "")) // 4
+            except:
+                continue
+
+    # 估算费用：如果没有真实 usage 数据则标注
+    if has_real_usage:
+        total = total_input_tokens + total_output_tokens
+        estimated_cost = f"${total / 1_000_000 * 2:.2f}"
+        cost_note = "基于真实 token 用量估算"
+    else:
+        estimated_cost = f"${total_tokens / 1_000_000 * 2:.2f}"
+        cost_note = "N/A (仅基于字符数估算)"
+
+    return {
+        "total_tokens": total_tokens,
+        "input_tokens": total_input_tokens if has_real_usage else None,
+        "output_tokens": total_output_tokens if has_real_usage else None,
+        "sessions": sum(model_counts.values()),
+        "models": model_counts,
+        "estimated_cost": estimated_cost,
+        "cost_note": cost_note,
+    }
 
 def get_patterns_data():
     sessions_dir = HERMES_HOME / "sessions"
@@ -185,6 +259,19 @@ def get_patterns_data():
             except: continue
     return {"hourly": hourly, "daily": dict(sorted(daily.items(), reverse=True)[:14]), "peak_hour": max(hourly.keys(), key=lambda k: hourly[k]) if any(hourly.values()) else "N/A"}
 
+
+# ── 过滤函数 (消除 call_hermes 和 call_hermes_stream 中的重复) ──
+def should_filter_line(line: str) -> bool:
+    """判断一行输出是否应该被过滤掉"""
+    if not line.strip():
+        return True
+    if line.startswith(('session_id:', 'Query:', 'Initializing', '|', 'Hermes Agent', '===', '---', 'Tools:', 'Available Skills:')):
+        return True
+    if 'upstream' in line:
+        return True
+    return False
+
+
 def call_hermes_stream(message: str, image_path: Optional[str] = None) -> Generator[str, None, None]:
     """流式调用 hermes，实时返回输出（仅回复内容，不含思考过程）"""
     try:
@@ -192,11 +279,11 @@ def call_hermes_stream(message: str, image_path: Optional[str] = None) -> Genera
         if not hermes_cmd:
             yield "错误：找不到 hermes 命令，请确认已正确安装\n"
             return
-        
+
         # 使用 -Q 参数获取纯净回复（过滤终端输出和思考过程）
         cmd = [hermes_cmd, "chat", "-q", message or "你好", "-Q", "--source", "web"]
         if image_path: cmd.extend(["--image", image_path])
-        
+
         # 使用 Popen 实现流式输出
         process = subprocess.Popen(
             cmd,
@@ -206,44 +293,24 @@ def call_hermes_stream(message: str, image_path: Optional[str] = None) -> Genera
             bufsize=1,
             env={**os.environ, "HERMES_HOME": str(HERMES_HOME)}
         )
-        
-        # 实时读取输出，严格过滤
+
+        # 实时读取输出，使用提取的过滤函数
         has_output = False
-        
+
         for line in process.stdout:
-            # 只去掉行尾换行符
             line = line.rstrip('\n\r')
-            
-            # 跳过空行
-            if not line.strip():
+
+            if should_filter_line(line):
                 continue
-            
-            # 跳过 session_id 行
-            if line.startswith('session_id:'):
-                continue
-            
-            # 跳过所有系统信息行
-            if line.startswith('Query:') or line.startswith('Initializing'):
-                continue
-            if line.startswith('|'):  # 思考过程行
-                continue
-            if line.startswith('Hermes Agent'):  # 版本信息
-                continue
-            if 'upstream' in line:  # 上游信息
-                continue
-            if line.startswith('Tools:') or line.startswith('Available Skills:'):
-                continue
-            if line.startswith('===') or line.startswith('---'):
-                continue
-            
+
             # 输出行
             yield line
             has_output = True
-        
+
         # 如果没有任何输出，返回提示
         if not has_output:
             yield "没有收到回复\n"
-        
+
         process.wait()
     except subprocess.TimeoutExpired:
         yield "请求超时\n"
@@ -260,28 +327,11 @@ def call_hermes(message: str, image_path: Optional[str] = None) -> str:
         cmd = [hermes_cmd, "chat", "-q", message or "你好", "-Q", "--source", "web"]
         if image_path: cmd.extend(["--image", image_path])
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=300, env={**os.environ, "HERMES_HOME": str(HERMES_HOME)})
-        # 严格过滤不需要的行
+        # 使用提取的过滤函数
         lines = []
         for line in (result.stdout or '').split('\n'):
             line = line.rstrip('\n\r')
-            # 跳过空行
-            if not line.strip():
-                continue
-            # 跳过 session_id
-            if line.startswith('session_id:'):
-                continue
-            # 跳过系统信息
-            if line.startswith('Query:') or line.startswith('Initializing'):
-                continue
-            if line.startswith('|'):
-                continue
-            if line.startswith('Hermes Agent'):
-                continue
-            if 'upstream' in line:
-                continue
-            if line.startswith('Tools:') or line.startswith('Available Skills:'):
-                continue
-            if line.startswith('===') or line.startswith('---'):
+            if should_filter_line(line):
                 continue
             lines.append(line)
         return '\n'.join(lines) or result.stderr.strip() or "没有回复"
@@ -298,35 +348,46 @@ async def chat(message: str = Form(...), image: UploadFile = File(None), file: U
     try:
         if image:
             content = await image.read()
-            print(f"Received image: {image.filename}, size: {len(content)} bytes")
+            # 文件大小检查
+            if len(content) > MAX_FILE_SIZE:
+                logger.warning("图片文件过大: %d bytes (限制: %d)", len(content), MAX_FILE_SIZE)
+                return JSONResponse(status_code=413, content={"response": f"文件过大，最大允许 {MAX_FILE_SIZE // (1024*1024)}MB"})
+            logger.debug("Received image: %s, size: %d bytes", image.filename, len(content))
             tp = tempfile.mktemp(suffix=".png", dir=str(UPLOAD_DIR))
             with open(tp, "wb") as f: f.write(content)
             image_path = tp
-            print(f"Image saved to: {image_path}")
+            logger.debug("Image saved to: %s", image_path)
         if file:
             content = await file.read()
-            print(f"Received file: {file.filename}, size: {len(content)} bytes, content_type: {file.content_type}")
+            # 文件大小检查
+            if len(content) > MAX_FILE_SIZE:
+                logger.warning("文件过大: %d bytes (限制: %d)", len(content), MAX_FILE_SIZE)
+                return JSONResponse(status_code=413, content={"response": f"文件过大，最大允许 {MAX_FILE_SIZE // (1024*1024)}MB"})
+            logger.debug("Received file: %s, size: %d bytes, content_type: %s", file.filename, len(content), file.content_type)
             file_path = tempfile.mktemp(suffix=f"_{file.filename}", dir=str(UPLOAD_DIR))
             with open(file_path, "wb") as f: f.write(content)
             try:
                 file_content = content.decode('utf-8')
-                print(f"File content (text): {len(file_content)} chars")
+                logger.debug("File content (text): %d chars", len(file_content))
             except:
-                print("File is binary, cannot read as text")
+                logger.debug("File is binary, cannot read as text")
         msg = message or "请分析"
         if file and file.filename:
             if file_content:
                 msg = f"{msg}\n\n[文件：{file.filename}]\n文件内容:\n{file_content[:10000]}"
             else:
                 msg = f"{msg}\n\n[文件：{file.filename}]\n这是一个二进制文件，已保存到：{file_path}"
-        print(f"Calling hermes with message: {msg[:100]}..., image_path: {image_path}")
-        response = call_hermes(msg, image_path)
-        print(f"Hermes response: {response[:200]}...")
+        logger.debug("Calling hermes with message: %s..., image_path: %s", msg[:100], image_path)
+
+        # 使用 asyncio.to_thread 避免阻塞事件循环
+        response = await asyncio.to_thread(call_hermes, msg, image_path)
+        logger.debug("Hermes response: %s...", response[:200])
+
         for p in [image_path, file_path]:
             if p and os.path.exists(p): os.remove(p)
         return JSONResponse(content={"response": response})
     except Exception as e:
-        print(f"Chat error: {e}")
+        logger.error("Chat error: %s", e, exc_info=True)
         return JSONResponse(content={"response": f"错误：{e}"})
 
 @app.post("/api/chat_stream")
@@ -337,11 +398,15 @@ async def chat_stream(message: str = Form(...), image: UploadFile = File(None), 
     try:
         if image:
             content = await image.read()
+            if len(content) > MAX_FILE_SIZE:
+                return JSONResponse(status_code=413, content={"response": f"文件过大，最大允许 {MAX_FILE_SIZE // (1024*1024)}MB"})
             tp = tempfile.mktemp(suffix=".png", dir=str(UPLOAD_DIR))
             with open(tp, "wb") as f: f.write(content)
             image_path = tp
         if file:
             content = await file.read()
+            if len(content) > MAX_FILE_SIZE:
+                return JSONResponse(status_code=413, content={"response": f"文件过大，最大允许 {MAX_FILE_SIZE // (1024*1024)}MB"})
             file_path = tempfile.mktemp(suffix=f"_{file.filename}", dir=str(UPLOAD_DIR))
             with open(file_path, "wb") as f: f.write(content)
             try:
@@ -354,20 +419,66 @@ async def chat_stream(message: str = Form(...), image: UploadFile = File(None), 
                 msg = f"{msg}\n\n[文件：{file.filename}]\n文件内容:\n{file_content[:10000]}"
             else:
                 msg = f"{msg}\n\n[文件：{file.filename}]\n这是一个二进制文件"
-        
+
         def generate():
-            for chunk in call_hermes_stream(msg, image_path):
-                # chunk 已经包含换行符，SSE 协议以 \n\n 结束
+            # 使用 asyncio.to_thread 包装流式调用，避免阻塞
+            # 由于 call_hermes_stream 是 generator，我们用线程池执行
+            import queue
+            q = queue.Queue()
+
+            def _run():
+                try:
+                    for chunk in call_hermes_stream(msg, image_path):
+                        q.put(chunk)
+                except Exception as e:
+                    q.put(f"错误：{e}")
+                finally:
+                    # 清理临时文件
+                    for p in [image_path, file_path]:
+                        if p and os.path.exists(p):
+                            os.remove(p)
+                    q.put(None)  # sentinel
+
+            # 在线程中运行
+            thread = __import__('threading').Thread(target=_run, daemon=True)
+            thread.start()
+
+            while True:
+                chunk = q.get()
+                if chunk is None:
+                    break
                 yield f"data: {chunk}\n\n"
-            # 清理临时文件
-            for p in [image_path, file_path]:
-                if p and os.path.exists(p): os.remove(p)
             yield "data: [DONE]\n\n"
-        
+
         return StreamingResponse(generate(), media_type="text/event-stream")
     except Exception as e:
-        print(f"Stream error: {e}")
+        logger.error("Stream error: %s", e, exc_info=True)
         return JSONResponse(content={"response": f"错误：{e}"})
+
+# ── 健康检查端点 ──
+@app.get("/api/health")
+async def health_check():
+    """健康检查：返回服务状态"""
+    import shutil as _shutil
+    sessions_dir = HERMES_HOME / "sessions"
+    sessions_count = 0
+    if sessions_dir.exists():
+        sessions_count = len(glob.glob(str(sessions_dir / "*.json")))
+
+    # 磁盘空闲空间
+    try:
+        statvfs = os.statvfs(str(HERMES_HOME))
+        disk_free_gb = round((statvfs.f_frsize * statvfs.f_bavail) / (1024 ** 3), 2)
+    except Exception:
+        disk_free_gb = -1.0
+
+    return JSONResponse(content={
+        "status": "ok",
+        "uptime": round(time.time() - START_TIME, 1),
+        "hermes_path": str(HERMES_HOME),
+        "disk_free_gb": disk_free_gb,
+        "sessions_count": sessions_count,
+    })
 
 @app.get("/api/memory")
 async def api_memory(): return JSONResponse(content=get_memory_data())
@@ -395,16 +506,16 @@ async def check_plugin_update():
         # 检查是否是 git 仓库
         if not (plugin_dir / ".git").exists():
             return JSONResponse(content={"has_update": False, "current_version": "unknown", "latest_version": "unknown", "error": "非 git 仓库"})
-        
+
         # 获取当前版本信息
         result = subprocess.run(["git", "-C", str(plugin_dir), "log", "-1", "--format=%h %s"], capture_output=True, text=True, timeout=10)
         current_version = result.stdout.strip() if result.returncode == 0 else "unknown"
-        
+
         # 获取远程更新信息
         result = subprocess.run(["git", "-C", str(plugin_dir), "fetch", "origin"], capture_output=True, text=True, timeout=30)
         if result.returncode != 0:
             return JSONResponse(content={"has_update": False, "current_version": current_version, "latest_version": "unknown", "error": "无法连接远程仓库"})
-        
+
         # 比较本地和远程
         result = subprocess.run(["git", "-C", str(plugin_dir), "rev-list", "HEAD..origin/main", "--count"], capture_output=True, text=True, timeout=10)
         if result.returncode == 0:
@@ -414,7 +525,7 @@ async def check_plugin_update():
                 result = subprocess.run(["git", "-C", str(plugin_dir), "log", "origin/main", "-1", "--format=%h %s"], capture_output=True, text=True, timeout=10)
                 latest_version = result.stdout.strip() if result.returncode == 0 else "unknown"
                 return JSONResponse(content={"has_update": True, "current_version": current_version, "latest_version": latest_version, "commits_behind": ahead_count})
-        
+
         return JSONResponse(content={"has_update": False, "current_version": current_version, "latest_version": current_version, "commits_behind": 0})
     except Exception as e:
         return JSONResponse(content={"has_update": False, "error": str(e)})
@@ -444,9 +555,9 @@ async def execute_plugin_update():
 
 # 静态文件服务
 from fastapi.staticfiles import StaticFiles
-import os
-static_dir = os.path.join(os.path.dirname(__file__), 'static')
-if os.path.exists(static_dir):
+import os as _os
+static_dir = _os.path.join(_os.path.dirname(__file__), 'static')
+if _os.path.exists(static_dir):
     app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
 def get_html_content():
@@ -461,33 +572,78 @@ def get_html_content():
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
     <title>Hermes Agent</title>
-    <!-- marked.js for Markdown rendering -->
+    <!-- marked.js for Markdown rendering (CDN + fallback) -->
+    <!-- KaTeX for math rendering -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css?v={timestamp}">
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js?v={timestamp}"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js?v={timestamp}"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js?v={timestamp}"></script>
-    <!-- highlight.js for syntax highlighting -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/atom-one-dark.min.css?v={timestamp}">
-    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/core.min.js?v={timestamp}"></script>
-    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/python.min.js?v={timestamp}"></script>
-    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/javascript.min.js?v={timestamp}"></script>
-    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/typescript.min.js?v={timestamp}"></script>
-    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/bash.min.js?v={timestamp}"></script>
-    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/json.min.js?v={timestamp}"></script>
-    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/yaml.min.js?v={timestamp}"></script>
-    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/sql.min.js?v={timestamp}"></script>
-    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/java.min.js?v={timestamp}"></script>
-    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/go.min.js?v={timestamp}"></script>
-    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/rust.min.js?v={timestamp}"></script>
-    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/cpp.min.js?v={timestamp}"></script>
-    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/c.min.js?v={timestamp}"></script>
-    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/csharp.min.js?v={timestamp}"></script>
-    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/php.min.js?v={timestamp}"></script>
-    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/ruby.min.js?v={timestamp}"></script>
-    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/swift.min.js?v={timestamp}"></script>
-    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/kotlin.min.js?v={timestamp}"></script>
-    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/shell.min.js?v={timestamp}"></script>
-    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/xml.min.js?v={timestamp}"></script>
-    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/css.min.js?v={timestamp}"></script>
-    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/diff.min.js?v={timestamp}"></script>
-    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/markdown.min.js?v={timestamp}"></script>
+    <!-- KaTeX + marked CDN fallback -->
+    <script>
+    if (typeof marked === 'undefined') {{
+        console.warn('marked.js CDN 加载失败，使用内置简易 Markdown 解析器');
+        // 内置简易 Markdown 解析器作为 CDN 回退
+        window.marked = {{
+            parse: function(text) {{
+                if (!text) return '';
+                var html = text;
+                // 代码块
+                html = html.replace(/```([\\s\\S]*?)```/g, function(m, code) {{
+                    return '<pre><code>' + code.replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</code></pre>';
+                }});
+                // 行内代码
+                html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+                // 粗体
+                html = html.replace(/\\*\\*([^*]+)\\*\\*/g, '<strong>$1</strong>');
+                // 斜体
+                html = html.replace(/\\*([^*]+)\\*/g, '<em>$1</em>');
+                // 标题
+                html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
+                html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>');
+                html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>');
+                // 链接
+                html = html.replace(/\\[([^\\]]+)\\]\\(([^)]+)\\)/g, '<a href="$2" target="_blank">$1</a>');
+                // 换行
+                html = html.replace(/\\n/g, '<br>');
+                return html;
+            }}
+        }};
+    }}
+    </script>
+    <!-- highlight.js for syntax highlighting (CDN + fallback) -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/atom-one-dark.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/core.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/python.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/javascript.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/typescript.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/bash.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/json.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/yaml.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/sql.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/java.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/go.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/rust.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/cpp.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/c.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/csharp.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/php.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/ruby.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/swift.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/kotlin.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/shell.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/xml.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/css.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/diff.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/markdown.min.js"></script>
+    <script>
+    if (typeof hljs === 'undefined') {{
+        console.warn('highlight.js CDN 加载失败，代码高亮功能不可用');
+        window.hljs = {{
+            highlightElement: function(el) {{ }},
+            highlightAll: function() {{ }}
+        }};
+    }}
+    </script>
     <style>
         :root {{
             /* 默认主题 - 浅色 */
@@ -609,20 +765,22 @@ def get_html_content():
         .page.active {{ display: flex; }}
         .page-header {{ padding: 20px 30px; border-bottom: 1px solid var(--border-color); background: var(--bg-secondary); }}
         .page-header h2 {{ font-size: 18px; color: var(--text-primary); }}
-        .chat-messages {{ flex: 1; overflow-y: auto; overflow-x: hidden; padding: 30px; display: flex; flex-direction: column; gap: 20px; }}
+        .chat-messages {{ flex: 1; overflow-y: auto; overflow-x: hidden; padding: 24px 30px; display: flex; flex-direction: column; gap: 24px; }}
         .message {{ display: flex; gap: 15px; max-width: 80%; }}
         .message.user {{ align-self: flex-end; flex-direction: row-reverse; }}
         .message-avatar {{ width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 20px; flex-shrink: 0; }}
-        .message-content {{ background: var(--message-bg); padding: 15px 20px; border-radius: 16px; border: 1px solid var(--border-light); max-width: 100%; overflow-wrap: break-word; word-wrap: break-word; word-break: break-word; }}
-        .message-text {{ color: var(--text-primary); line-height: 1.6; font-size: 15px; overflow-wrap: break-word; word-wrap: break-word; word-break: break-word; max-width: 100%; }}
-        .message-text p {{ margin: 0.5em 0; }}
+        .message-content {{ background: var(--message-bg); padding: 18px 22px; border-radius: 16px; border: 1px solid var(--border-light); max-width: 100%; overflow-wrap: break-word; word-wrap: break-word; word-break: break-word; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }}
+        .message-text {{ color: var(--text-primary); line-height: 1.75; font-size: 15px; overflow-wrap: break-word; word-wrap: break-word; word-break: break-word; max-width: 100%; }}
+        .message-text p {{ margin: 0.75em 0; }}
         .message-text p:first-child {{ margin-top: 0; }}
         .message-text p:last-child {{ margin-bottom: 0; }}
-        .message-text code {{ background: var(--code-bg); padding: 2px 6px; border-radius: 4px; font-family: 'Consolas', 'Monaco', 'Courier New', monospace; font-size: 13px; color: var(--code-text); }}
-        .message-text pre {{ background: var(--pre-bg); padding: 0; border-radius: 8px; overflow-x: auto; margin: 10px 0; border: 1px solid var(--border-light); }}
+        .message-text code {{ background: var(--code-bg); padding: 3px 7px; border-radius: 5px; font-family: 'Consolas', 'Monaco', 'Courier New', monospace; font-size: 13px; color: var(--code-text); border: 1px solid var(--border-light); }}
+        .message-text pre {{ background: var(--pre-bg); padding: 16px 16px 8px; border-radius: 10px; overflow-x: auto; margin: 14px 0; border: 1px solid var(--border-light); position: relative; }}
         .message-text pre code {{ background: transparent; padding: 15px; color: inherit; font-size: 13px; line-height: 1.5; display: block; }}
         /* highlight.js 高亮样式覆盖 */
-        .message-text pre code .hljs {{ background: transparent; padding: 0; }}
+        /* hljs compatibility */
+        .message-text pre code {{ color: var(--pre-text); }}
+        .message-text pre code .hljs {{ background: transparent; padding: 0; color: inherit; }}
         .message-text pre code .hljs-comment {{ color: #6a9955; font-style: italic; }}
         .message-text pre code .hljs-keyword {{ color: #569cd6; font-weight: bold; }}
         .message-text pre code .hljs-string {{ color: #ce9178; }}
@@ -633,7 +791,7 @@ def get_html_content():
         .message-text pre code .hljs-operator {{ color: #d4d4d4; }}
         .message-text pre code .hljs-punctuation {{ color: #d4d4d4; }}
         /* 代码块语言标签 */
-        .message-text pre {{ position: relative; }}
+        /* position: relative removed - merged above */
         .message-text pre::before {{ 
             content: attr(data-language); 
             position: absolute; 
@@ -647,16 +805,20 @@ def get_html_content():
             text-transform: uppercase;
             font-weight: 600;
         }}
-        .message-text ul, .message-text ol {{ margin: 10px 0; padding-left: 25px; }}
+        .message-text ul, .message-text ol {{ margin: 12px 0; padding-left: 24px; }}
+        .message-text ul ul, .message-text ol ol {{ margin: 4px 0; }}
+        .message-text li {{ margin: 6px 0; line-height: 1.7; }}
+        .message-text li > p {{ margin: 4px 0; }}
         .message-text li {{ margin: 5px 0; }}
-        .message-text li::marker {{ color: var(--accent-primary); }}
-        .message-text blockquote {{ border-left: 3px solid var(--accent-primary); padding-left: 15px; margin: 10px 0; color: var(--text-secondary); background: var(--blockquote-bg); padding: 10px 15px; border-radius: 0 8px 8px 0; }}
-        .message-text strong {{ color: var(--accent-primary); font-weight: 600; }}
+        .message-text li::marker {{ color: var(--text-secondary); }}
+        .message-text blockquote {{ border-left: 4px solid var(--accent-primary); padding: 12px 16px; margin: 14px 0; color: var(--text-secondary); background: var(--blockquote-bg); border-radius: 0 8px 8px 0; font-style: italic; }}
+        .message-text strong {{ color: var(--text-primary); font-weight: 700; }}
         .message-text em {{ color: var(--italic-text); font-style: italic; }}
-        .message-text h1, .message-text h2, .message-text h3 {{ margin: 15px 0 10px; color: var(--accent-primary); }}
-        .message-text h1 {{ font-size: 20px; border-bottom: 1px solid var(--border-light); padding-bottom: 8px; }}
-        .message-text h2 {{ font-size: 18px; border-bottom: 1px solid var(--border-light); padding-bottom: 6px; }}
-        .message-text h3 {{ font-size: 16px; }}
+        /* Headings - clear hierarchy */
+        .message-text h1 {{ margin: 20px 0 12px; color: var(--text-primary); font-size: 22px; font-weight: 700; border-bottom: 2px solid var(--border-color); padding-bottom: 8px; }}
+        .message-text h2 {{ margin: 18px 0 10px; color: var(--text-primary); font-size: 19px; font-weight: 600; border-bottom: 1px solid var(--border-light); padding-bottom: 6px; }}
+        .message-text h3 {{ margin: 14px 0 8px; color: var(--accent-primary); font-size: 16px; font-weight: 600; }}
+        .message-text h4 {{ margin: 12px 0 6px; color: var(--accent-primary); font-size: 15px; font-weight: 600; }}
         .message-text a {{ color: var(--accent-primary); text-decoration: none; }}
         .message-text a:hover {{ text-decoration: underline; }}
         .message-text table {{ border-collapse: collapse; width: 100%; margin: 10px 0; }}
@@ -664,7 +826,7 @@ def get_html_content():
         .message-text th {{ background: var(--table-header-bg); color: var(--accent-primary); font-weight: 600; }}
         .message-text tr:nth-child(even) {{ background: rgba(255, 255, 255, 0.02); }}
         .message-text tr:hover {{ background: var(--hover-bg); }}
-        .message-text hr {{ border: none; border-top: 1px solid var(--border-light); margin: 20px 0; }}
+        .message-text hr {{ border: none; border-top: 2px solid var(--border-light); margin: 24px 0; }}
         .message-text img {{ max-width: 100%; border-radius: 8px; margin: 10px 0; }}
         .message-image {{ max-width: 100%; max-height: 400px; border-radius: 10px; margin-top: 10px; border: 2px solid var(--border-light); }}
         .input-container {{ padding: 20px 30px; background: var(--bg-secondary); border-top: 1px solid var(--border-color); }}
@@ -814,6 +976,38 @@ def get_html_content():
         .storage-action-btn:hover {{ transform: translateY(-2px); box-shadow: 0 6px 25px rgba(255,68,68,0.4); }}
         .storage-action-btn:active {{ transform: translateY(0); }}
         .storage-info {{ margin-top: 16px; padding: 12px 16px; background: var(--bg-secondary); border-radius: 10px; font-size: 13px; color: var(--text-secondary); border-left: 3px solid var(--accent-primary); }}
+        /* Code block copy button */
+        .code-block-wrapper {{ position: relative; margin: 10px 0; }}
+        .code-copy-btn {{ position: absolute; top: 8px; right: 8px; background: rgba(255,255,255,0.1); color: #888; border: none; padding: 4px 10px; border-radius: 6px; cursor: pointer; font-size: 12px; transition: all 0.2s; z-index: 10; }}
+        .code-copy-btn:hover {{ background: var(--accent-primary); color: white; }}
+        .code-copy-btn.copied {{ background: var(--accent-secondary); color: white; }}
+        /* Responsive code blocks */
+        .message-text pre {{ overflow-x: auto; max-width: 100%; }}
+        .message-text pre code {{ display: block; min-width: 0; }}
+        /* KaTeX styles */
+        .katex-display {{ margin: 10px 0; overflow-x: auto; }}
+        .katex {{ font-size: 1.1em; }}
+        .message-text .katex-display {{ background: transparent; padding: 16px 0; border-radius: 8px; text-align: center; border-left: 3px solid var(--accent-primary); margin: 16px 0; }}
+        /* Task list checkboxes */
+        .task-list-item {{ list-style: none !important; margin-left: -24px !important; padding-left: 4px !important; }}
+        .task-list-item::marker {{ content: none !important; display: none !important; }}
+        .task-list-item::before {{ content: none !important; }}
+        ul > .task-list-item {{ list-style-type: none !important; }}
+        /* Remove bullets from any list containing task items */
+        ul:has(.task-list-item) {{ list-style: none !important; padding-left: 0 !important; }}
+        ul:has(> .task-list-item) {{ list-style: none !important; padding-left: 0 !important; }}
+        /* Hide bullets on any list item containing a checkbox */
+        .message-text ul li:has(input[type="checkbox"]) {{ list-style: none !important; }}
+        .message-text ul li:has(input[type="checkbox"])::marker {{ content: none !important; display: none !important; }}
+        /* Alternative: hide all markers in task list context */
+        .message-text li input[type="checkbox"] {{ margin-right: 8px; }}
+        .message-text li input[type="checkbox"]::before {{ content: ''; }}
+        .message-text ul li.task-list-item {{ list-style: none !important; }}
+        .task-list-item input[type="checkbox"] {{ margin-right: 6px; accent-color: var(--accent-primary); }}
+        /* Stream update animation (prevent flash) */
+        .streaming-content {{ transition: opacity 0.1s; }}
+        /* Update checkmark animation */
+        @keyframes copy-check {{ 0% {{ transform: scale(0); }} 50% {{ transform: scale(1.2); }} 100% {{ transform: scale(1); }} }}
     </style>
 </head>
 <body>
@@ -969,7 +1163,7 @@ def get_html_content():
                             <h3 class="setting-title">关于</h3>
                         </div>
                         <div class="about-section">
-                            <p><strong>Hermes Web Chat</strong> <span class="version-badge">v1.10.0</span></p>
+                            <p><strong>Hermes Web Chat</strong> <span class="version-badge">v1.12.0</span></p>
                             <p>Hermes Agent 的现代化 Web 聊天界面插件，支持 Markdown 渲染、多主题切换、文件/图片上传、流式响应等功能。</p>
                             <p>📍 数据存储在本地浏览器 (localStorage) 和 Hermes 会话文件中</p>
                             <p>🔧 主题偏好会自动保存，下次访问时自动应用</p>
@@ -984,11 +1178,12 @@ def get_html_content():
 </html>'''
 
 if __name__ == "__main__":
-    port = 8888
+    # 从配置文件或命令行参数获取端口
+    port = CONFIG.get("port", 8888)
     if len(sys.argv) > 1:
         try: port = int(sys.argv[1])
         except: pass
-    
+
     # 确保 PATH 包含常见安装路径
     if platform.system() == "Windows":
         extra_paths = [
@@ -1002,10 +1197,13 @@ if __name__ == "__main__":
             "/opt/homebrew/bin",
             "/usr/local/bin",
         ]
-    
+
     current_path = os.environ.get("PATH", "")
     new_path = os.pathsep.join(extra_paths + [current_path])
     os.environ["PATH"] = new_path
-    
-    print("\n" + "="*50 + "\n Hermes Agent Web Chat\n" + "="*50 + f"\n Access: http://localhost:{port}\n" + "="*50 + "\n")
+
+    logger.info("Hermes Agent Web Chat v1.12.0")
+    logger.info("Access: http://localhost:%d", port)
+    logger.info("HERMES_HOME: %s", HERMES_HOME)
+    logger.info("Config: %s", CONFIG_FILE if CONFIG_FILE.exists() else "using defaults")
     uvicorn.run(app, host="127.0.0.1", port=port)
